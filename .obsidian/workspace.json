@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "ReadMe.md",
+                "file": "README.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "ReadMe"
+              "title": "README"
             }
           }
         ]
@@ -186,7 +186,7 @@
   },
   "active": "b5184f76a7c40528",
   "lastOpenFiles": [
-    "ReadMe.md",
-    "ReadMe.md"
+    "README.md",
+    "README.md"
   ]
 }
