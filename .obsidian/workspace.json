@@ -17,13 +17,13 @@
                 "state": {
                   "type": "markdown",
                   "state": {
-                    "file": "backend/design/MarketService.md",
+                    "file": "profile/README.md",
                     "mode": "source",
                     "source": false,
                     "backlinks": false
                   },
                   "icon": "lucide-file",
-                  "title": "MarketService"
+                  "title": "README"
                 }
               }
             ]
@@ -134,7 +134,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "backend/design/MarketService.md",
+                "file": "profile/README.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -144,7 +144,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "MarketService 의 백링크"
+              "title": "README 의 백링크"
             }
           },
           {
@@ -210,8 +210,8 @@
   },
   "active": "b5184f76a7c40528",
   "lastOpenFiles": [
-    "profile/README.md",
     "backend/design/MarketService.md",
+    "profile/README.md",
     "backend/design/Main.md",
     "무제.md",
     "backend/design",

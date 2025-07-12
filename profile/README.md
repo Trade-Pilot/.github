@@ -6,4 +6,4 @@
 
 
 # Backend Design
-[Backend Design](obsidian://open?vault=Trade-Pilot-Document&file=backend%2Fdesign%2FMarketService)
+[Backend Design](../backend/design/MarketService.md)
