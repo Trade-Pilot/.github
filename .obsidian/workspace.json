@@ -11,10 +11,14 @@
             "id": "b5184f76a7c40528",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "README.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "새 탭"
+              "title": "README"
             }
           }
         ]
@@ -180,8 +184,9 @@
       "command-palette:명령어 팔레트 열기": false
     }
   },
-  "active": "7c71b4c1f79d9ed4",
+  "active": "b5184f76a7c40528",
   "lastOpenFiles": [
+    "README.md",
     "README.md",
     "README.md"
   ]
