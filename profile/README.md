@@ -25,8 +25,10 @@
 
 
 # Backend
-- [Backend Design](../backend/design/MarketService.md)
-- [VirtualTrade Design](../backend/design/VirtualTradeService.md)
+- [Market Service 설계](../backend/design/market-service.md)
+- [Agent Service 설계](../backend/design/agent-service.md)
+- [Simulation Service 설계](../backend/design/simulation-service.md)
+- [VirtualTrade Service 설계](../backend/design/virtual-trade-service.md)
 
 # Infra
 - [Infra](../infra/README.md)
