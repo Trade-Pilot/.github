@@ -6,13 +6,19 @@ Trade Pilot 프로젝트의 전체 문서입니다.
 
 ### 프로젝트 개요
 - **[프로젝트 개요](project-overview.md)**: Trade Pilot의 비전, 아키텍처, 주요 도메인
-- **[개발 로드맵](development-roadmap.md)**: 단계별 개발 계획 (Phase 1~5)
-- **[피처 리스트](feature-list.md)**: 전체 기능 체크리스트
+- **[개발 로드맵](development-roadmap.md)**: 단계별 개발 계획, KPI 지표, 리스크 관리 (Phase 1~5)
+
+### 기능별 통합 문서 (✨ 추천)
+- **[01. 데이터 수집](features/01-data-collection.md)**: 시장 데이터 수집 및 품질 관리
+- **[02. 전략 구성](features/02-agent-strategy.md)**: 거래 전략 정의 및 신호 생성
+- **[03. 시뮬레이션](features/03-simulation.md)**: 과거 데이터 백테스팅
+- **[04. 가상 거래](features/04-virtual-trading.md)**: 실시간 Paper Trading
+- **[05. 실거래](features/05-real-trading.md)**: 실제 자금 거래 실행
 
 ### 기술 스택
 - **[기술 스택 개요](profile/README.md)**: Frontend, Backend, Infra 기술 스택
 
-### Backend 설계
+### Backend 설계 (상세 기술 문서)
 - **[Market Service](backend/design/market-service.md)**: 시장 데이터 수집 및 관리
 - **[Agent Service](backend/design/agent-service.md)**: 거래 전략 정의 및 실행
 - **[Simulation Service](backend/design/simulation-service.md)**: 백테스팅 시스템
@@ -26,19 +32,26 @@ Trade Pilot 프로젝트의 전체 문서입니다.
 
 ## 🎯 빠른 시작
 
-### 1. 프로젝트 이해하기
+### 1. 프로젝트 이해하기 (초보자 추천)
 Trade Pilot이 처음이라면 다음 순서로 문서를 읽어보세요:
 
 1. **[프로젝트 개요](project-overview.md)** - 전체적인 그림 파악
 2. **[개발 로드맵](development-roadmap.md)** - 어떻게 개발할 것인가
-3. 현재 Phase에 해당하는 서비스 설계 문서
+3. **기능별 통합 문서** - 각 기능의 목적과 구현 방법 이해
+   - **[데이터 수집](features/01-data-collection.md)** ← Phase 1 진행 중
+   - **[전략 구성](features/02-agent-strategy.md)** ← Phase 2
+   - **[시뮬레이션](features/03-simulation.md)** ← Phase 2
+   - **[가상 거래](features/04-virtual-trading.md)** ← Phase 3
+   - **[실거래](features/05-real-trading.md)** ← Phase 4
 
 ### 2. 개발 참여하기
 개발에 참여하고 싶다면:
 
-1. **[피처 리스트](feature-list.md)**에서 미완료 항목 확인
-2. 해당 서비스의 설계 문서 읽기
-3. 구현 시작
+1. **[개발 로드맵](development-roadmap.md)**에서 현재 Phase 확인
+2. 현재 Phase의 **기능별 통합 문서** 읽기
+3. 각 문서의 **완료 조건**, **KPI 지표**, **리스크 관리** 확인
+4. Backend 상세 설계 문서 읽기 (필요 시)
+5. 구현 시작
 
 ---
 
