@@ -19,10 +19,10 @@ Trade Pilot 프로젝트의 전체 문서입니다.
 - **[기술 스택 개요](profile/README.md)**: Frontend, Backend, Infra 기술 스택
 
 ### Backend 설계 (상세 기술 문서)
-- **[Market Service](backend/design/market-service.md)**: 시장 데이터 수집 및 관리
-- **[Agent Service](backend/design/agent-service.md)**: 거래 전략 정의 및 실행
-- **[Simulation Service](backend/design/simulation-service.md)**: 백테스팅 시스템
-- **[VirtualTrade Service](backend/design/virtual-trade-service.md)**: 가상거래 시스템
+- **[Market Service](backend/legacy-design/market-service.md)**: 시장 데이터 수집 및 관리
+- **[Agent Service](backend/legacy-design/agent-service.md)**: 거래 전략 정의 및 실행
+- **[Simulation Service](backend/legacy-design/simulation-service.md)**: 백테스팅 시스템
+- **[VirtualTrade Service](backend/legacy-design/virtual-trade-service.md)**: 가상거래 시스템
 - **[Trade Service]**: 실거래 시스템 (작성 예정)
 
 ### Infrastructure
@@ -67,7 +67,7 @@ Trade Pilot은 5개의 핵심 도메인으로 구성됩니다:
 - OHLCV 캔들 데이터 수집
 - 데이터 품질 관리 (Flat Candle)
 
-**문서**: [market-service.md](backend/design/market-service.md)
+**문서**: [market-service.md](backend/legacy-design/market-service.md)
 
 **현재 상태**: ✅ 설계 완료 → 🔄 구현 중
 
@@ -81,7 +81,7 @@ Trade Pilot은 5개의 핵심 도메인으로 구성됩니다:
 - 매수/매도 신호 생성
 - 포트폴리오 관리
 
-**문서**: [agent-service.md](backend/design/agent-service.md)
+**문서**: [agent-service.md](backend/legacy-design/agent-service.md)
 
 **현재 상태**: ✅ 설계 완료 → 🔜 구현 예정 (Phase 2)
 
@@ -95,7 +95,7 @@ Trade Pilot은 5개의 핵심 도메인으로 구성됩니다:
 - 성과 측정 (수익률, MDD, 샤프비율 등)
 - 파라미터 최적화 (Grid Search, Walk-Forward)
 
-**문서**: [simulation-service.md](backend/design/simulation-service.md)
+**문서**: [simulation-service.md](backend/legacy-design/simulation-service.md)
 
 **현재 상태**: ✅ 설계 완료 → 🔜 구현 예정 (Phase 2)
 
@@ -109,7 +109,7 @@ Trade Pilot은 5개의 핵심 도메인으로 구성됩니다:
 - 리스크 관리
 - 실시간 성과 모니터링
 
-**문서**: [virtual-trade-service.md](backend/design/virtual-trade-service.md)
+**문서**: [virtual-trade-service.md](backend/legacy-design/virtual-trade-service.md)
 
 **현재 상태**: 🔄 설계 필요 (Phase 3)
 

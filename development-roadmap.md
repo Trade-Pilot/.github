@@ -536,6 +536,6 @@ Trade Service (실거래)
 
 현재 진행 상황에 따라 다음 문서를 작성합니다:
 
-1. **Agent Service 설계**: [backend/design/agent-service.md](backend/design/agent-service.md)
-2. **Simulation Service 설계**: [backend/design/simulation-service.md](backend/design/simulation-service.md)
+1. **Agent Service 설계**: [backend/design/agent-service.md](backend/legacy-design/agent-service.md)
+2. **Simulation Service 설계**: [backend/design/simulation-service.md](backend/legacy-design/simulation-service.md)
 3. **각 Phase별 상세 Task 분해**: feature-list.md 업데이트
