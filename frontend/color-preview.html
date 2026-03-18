@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trade Pilot — Color System Preview</title>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+
+    /* ══════════════════ 라이트 테마 ══════════════════ */
+    :root, [data-theme="light"] {
+      --bg-base:    #F2F1FF;
+      --bg-surface: #FFFFFF;
+      --bg-elevated:#EEEAFF;
+      --bg-input:   #F8F7FF;
+      --bg-overlay: #E9E6FF;
+
+      --text-primary:   #18162E;
+      --text-secondary: #4D4975;
+      --text-tertiary:  #8C88B0;
+      --text-disabled:  #C0BDE0;
+
+      --border:       #E4E1F8;
+      --border-strong:#CECCF0;
+
+      --shadow: 0 0 0 1px rgba(206,204,240,0.8), 0 8px 24px rgba(90,80,180,0.10);
+    }
+
+    /* ══════════════════ 다크 테마 ══════════════════ */
+    [data-theme="dark"] {
+      --bg-base:    #12111A;
+      --bg-surface: #1C1B2E;
+      --bg-elevated:#252440;
+      --bg-input:   #181728;
+      --bg-overlay: #2D2C4A;
+
+      --text-primary:   #EEEDF8;
+      --text-secondary: #9490B5;
+      --text-tertiary:  #615D82;
+      --text-disabled:  #403D5E;
+
+      --border:       #252440;
+      --border-strong:#333063;
+
+      --shadow: 0 0 0 1px rgba(124,110,245,0.08), 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    /* ══════════════════ 공통 컬러 ══════════════════ */
+    :root {
+      --brand-50:  #F0EEFF;
+      --brand-100: #DDD8FC;
+      --brand-400: #A99AF8;
+      --brand-500: #7C6EF5;
+      --brand-600: #6557E8;
+      --brand-700: #5143CF;
+
+      --success: #06C270;
+      --warning: #F5A623;
+      --danger:  #F04452;
+      --up:      #F04452;
+      --down:    #4066E4;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: 'Pretendard Variable', 'Pretendard', -apple-system, sans-serif;
+      transition: background 0.25s ease, color 0.25s ease;
+    }
+
+    body { padding: 40px; min-height: 100vh; }
+
+    /* ── 헤더 ── */
+    .header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 40px;
+    }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { font-size: 14px; color: var(--text-secondary); }
+
+    /* ── 테마 토글 ── */
+    .theme-switcher {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 100px;
+      padding: 4px;
+    }
+    .theme-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 100px;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      border: none; background: transparent;
+      color: var(--text-secondary);
+      transition: all 0.2s;
+    }
+    .theme-btn.active {
+      background: var(--brand-500);
+      color: #fff;
+    }
+    .theme-btn:not(.active):hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+    /* ── 섹션 ── */
+    section { margin-bottom: 48px; }
+    h2 {
+      font-size: 11px; font-weight: 600; color: var(--text-secondary);
+      letter-spacing: 0.1em; text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    /* ── 스와치 ── */
+    .swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+    .swatch { display: flex; flex-direction: column; gap: 6px; width: 96px; }
+    .swatch-box {
+      width: 100%; height: 52px; border-radius: 10px;
+      border: 1px solid rgba(128,128,128,0.15);
+      transition: transform 0.15s;
+    }
+    .swatch-box:hover { transform: scale(1.04); }
+    .swatch-label { font-size: 11px; color: var(--text-secondary); }
+    .swatch-hex   { font-size: 11px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; }
+
+    /* ── 배경 계층 ── */
+    .bg-layers { display: flex; border-radius: 14px; overflow: hidden; border: 1px solid var(--border-strong); }
+    .bg-layer {
+      flex: 1; padding: 18px 14px;
+      border-right: 1px solid var(--border-strong);
+      display: flex; flex-direction: column; gap: 4px;
+      transition: background 0.25s;
+    }
+    .bg-layer:last-child { border-right: none; }
+    .bg-layer-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+    .bg-layer-hex  { font-size: 10px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; }
+    .bg-layer-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+    /* ── 텍스트 계층 ── */
+    .text-layers { display: flex; flex-direction: column; gap: 6px; }
+    .text-row {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 18px;
+      display: flex; align-items: center; gap: 20px;
+      transition: background 0.25s, border-color 0.25s;
+    }
+    .text-sample { font-size: 15px; flex: 1; }
+    .text-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+    .text-token { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text-tertiary); }
+
+    /* ── 컴포넌트 ── */
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px;
+      transition: background 0.25s, border-color 0.25s;
+      box-shadow: var(--shadow);
+    }
+    .card h2 { margin-bottom: 14px; }
+    .gap-12 { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+    /* 버튼 */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 0 14px; height: 36px; border-radius: 8px;
+      font-size: 13px; font-weight: 500; border: none; cursor: pointer;
+      font-family: inherit; transition: all 0.15s;
+    }
+    .btn-primary   { background: var(--brand-500); color: #fff; }
+    .btn-primary:hover { background: var(--brand-600); }
+    .btn-secondary {
+      background: var(--bg-surface); color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+    }
+    .btn-secondary:hover { background: var(--bg-elevated); }
+    .btn-danger    { background: var(--danger); color: #fff; }
+    .btn-ghost     { background: transparent; color: var(--text-secondary); }
+    .btn-ghost:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+    /* 배지 */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 5px;
+      font-size: 11px; font-weight: 500;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .badge-success { background: rgba(6,194,112,0.12);  color: #06C270; }
+    .badge-error   { background: rgba(240,68,82,0.12);   color: #F04452; }
+    .badge-warning { background: rgba(245,166,35,0.12);  color: #F5A623; }
+    .badge-info    { background: rgba(124,110,245,0.12); color: var(--brand-400); }
+    .badge-neutral { background: var(--bg-elevated);     color: var(--text-tertiary); }
+
+    /* 인풋 */
+    .input-wrap { display: flex; flex-direction: column; gap: 6px; }
+    .input-label { font-size: 12px; color: var(--text-secondary); }
+    input {
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      padding: 0 12px; height: 36px; border-radius: 8px;
+      font-size: 13px; font-family: inherit; outline: none; width: 200px;
+      transition: background 0.25s, border-color 0.15s;
+    }
+    input:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px rgba(124,110,245,0.25); }
+    input::placeholder { color: var(--text-tertiary); }
+
+    /* 토글 */
+    .toggle-wrap { display: flex; align-items: center; gap: 10px; }
+    .toggle-track {
+      width: 44px; height: 24px; border-radius: 100px;
+      position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0;
+    }
+    .toggle-track.on  { background: var(--brand-500); }
+    .toggle-track.off { background: var(--bg-elevated); border: 1px solid var(--border-strong); }
+    .toggle-thumb {
+      position: absolute; top: 3px;
+      width: 18px; height: 18px; border-radius: 50%; background: #fff;
+      transition: transform 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    }
+    .toggle-track.on  .toggle-thumb { transform: translateX(23px); }
+    .toggle-track.off .toggle-thumb { transform: translateX(3px); }
+    .toggle-label { font-size: 13px; color: var(--text-primary); }
+
+    /* 상승/하락 */
+    .updown-row { display: flex; gap: 12px; }
+    .updown-box {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px 28px;
+      transition: background 0.25s, border-color 0.25s;
+    }
+    .candle { width: 18px; border-radius: 2px; }
+    .candle-label { font-size: 12px; color: var(--text-secondary); }
+    .candle-price { font-size: 18px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+    /* 테이블 */
+    .table-wrap { overflow: hidden; border-radius: 14px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: var(--bg-elevated);
+      color: var(--text-secondary); font-weight: 500;
+      padding: 10px 16px; text-align: left;
+      border-bottom: 1px solid var(--border-strong);
+      font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
+      transition: background 0.25s;
+    }
+    tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); transition: background 0.25s; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--bg-elevated); }
+    .font-mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+
+    /* Select 미리보기 */
+    .select-trigger {
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      padding: 0 12px; height: 36px; border-radius: 8px;
+      font-size: 13px; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: space-between;
+      gap: 8px; cursor: pointer; min-width: 140px;
+      transition: background 0.25s;
+    }
+    .select-trigger:hover { border-color: var(--brand-500); }
+    .chevron { color: var(--text-tertiary); font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <!-- ── 헤더 + 테마 토글 ── -->
+  <div class="header">
+    <div>
+      <h1>Trade Pilot — Color System</h1>
+      <p class="subtitle">Soft Violet · 한국 주식 컨벤션 (빨강=상승, 파랑=하락)</p>
+    </div>
+    <div class="theme-switcher">
+      <button class="theme-btn" id="btn-light" onclick="setTheme('light')">
+        ☀️ 라이트
+      </button>
+      <button class="theme-btn active" id="btn-dark" onclick="setTheme('dark')">
+        🌙 다크
+      </button>
+    </div>
+  </div>
+
+  <!-- ── 브랜드 ── -->
+  <section>
+    <h2>Brand · Soft Violet</h2>
+    <div class="swatches">
+      <div class="swatch">
+        <div class="swatch-box" style="background:#F0EEFF;"></div>
+        <div class="swatch-label">brand-50</div>
+        <div class="swatch-hex">#F0EEFF</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#DDD8FC;"></div>
+        <div class="swatch-label">brand-100</div>
+        <div class="swatch-hex">#DDD8FC</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#A99AF8;"></div>
+        <div class="swatch-label">brand-400</div>
+        <div class="swatch-hex">#A99AF8</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#7C6EF5; outline: 3px solid rgba(124,110,245,0.5); outline-offset:3px;"></div>
+        <div class="swatch-label" style="color:var(--text-primary);">brand-500 ★</div>
+        <div class="swatch-hex">#7C6EF5</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#6557E8;"></div>
+        <div class="swatch-label">brand-600</div>
+        <div class="swatch-hex">#6557E8</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#5143CF;"></div>
+        <div class="swatch-label">brand-700</div>
+        <div class="swatch-hex">#5143CF</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 배경 계층 ── -->
+  <section>
+    <h2>Background Layers</h2>
+    <div class="bg-layers">
+      <div class="bg-layer" style="background:var(--bg-base);">
+        <div class="bg-layer-name">base</div>
+        <div class="bg-layer-hex" id="hex-base">#12111A</div>
+        <div class="bg-layer-desc">페이지 배경</div>
+      </div>
+      <div class="bg-layer" style="background:var(--bg-surface);">
+        <div class="bg-layer-name">surface</div>
+        <div class="bg-layer-hex" id="hex-surface">#1C1B2E</div>
+        <div class="bg-layer-desc">카드·패널</div>
+      </div>
+      <div class="bg-layer" style="background:var(--bg-elevated);">
+        <div class="bg-layer-name">elevated</div>
+        <div class="bg-layer-hex" id="hex-elevated">#252440</div>
+        <div class="bg-layer-desc">호버·선택</div>
+      </div>
+      <div class="bg-layer" style="background:var(--bg-input);">
+        <div class="bg-layer-name">input</div>
+        <div class="bg-layer-hex" id="hex-input">#181728</div>
+        <div class="bg-layer-desc">인풋 필드</div>
+      </div>
+      <div class="bg-layer" style="background:var(--bg-overlay);">
+        <div class="bg-layer-name">overlay</div>
+        <div class="bg-layer-hex" id="hex-overlay">#2D2C4A</div>
+        <div class="bg-layer-desc">드롭다운·모달</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 텍스트 계층 ── -->
+  <section>
+    <h2>Text Hierarchy</h2>
+    <div class="text-layers">
+      <div class="text-row">
+        <span class="text-sample" style="color:var(--text-primary); font-weight:600;">₩ 82,400 · BTC/USDT 수집 완료</span>
+        <div class="text-meta">
+          <span class="text-token">text-primary</span>
+          <span class="text-token" id="hex-text-primary">#EEEDF8</span>
+        </div>
+      </div>
+      <div class="text-row">
+        <span class="text-sample" style="color:var(--text-secondary);">마지막 수집: 2026-03-16 14:32:00 KST</span>
+        <div class="text-meta">
+          <span class="text-token">text-secondary</span>
+          <span class="text-token" id="hex-text-secondary">#9490B5</span>
+        </div>
+      </div>
+      <div class="text-row">
+        <span class="text-sample" style="color:var(--text-tertiary);">심볼을 검색하세요...</span>
+        <div class="text-meta">
+          <span class="text-token">text-tertiary</span>
+          <span class="text-token" id="hex-text-tertiary">#615D82</span>
+        </div>
+      </div>
+      <div class="text-row">
+        <span class="text-sample" style="color:var(--text-disabled);">재시작 불가 (상장폐지)</span>
+        <div class="text-meta">
+          <span class="text-token">text-disabled</span>
+          <span class="text-token" id="hex-text-disabled">#403D5E</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 시맨틱 컬러 ── -->
+  <section>
+    <h2>Semantic Colors (라이트/다크 공통)</h2>
+    <div class="swatches">
+      <div class="swatch">
+        <div class="swatch-box" style="background:#06C270;"></div>
+        <div class="swatch-label">success</div>
+        <div class="swatch-hex">#06C270</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#F5A623;"></div>
+        <div class="swatch-label">warning</div>
+        <div class="swatch-hex">#F5A623</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#F04452;"></div>
+        <div class="swatch-label">danger</div>
+        <div class="swatch-hex">#F04452</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#7C6EF5;"></div>
+        <div class="swatch-label">info</div>
+        <div class="swatch-hex">#7C6EF5</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 상승/하락 ── -->
+  <section>
+    <h2>상승 / 하락 · 한국 주식 컨벤션 (공통)</h2>
+    <div class="updown-row">
+      <div class="updown-box">
+        <div class="candle" style="height:60px; background:#F04452;"></div>
+        <div class="candle-price" style="color:#F04452;">+2.34%</div>
+        <div class="candle-label">상승 · 양봉 · #F04452</div>
+      </div>
+      <div class="updown-box">
+        <div class="candle" style="height:36px; background:#4066E4;"></div>
+        <div class="candle-price" style="color:#4066E4;">-1.12%</div>
+        <div class="candle-label">하락 · 음봉 · #4066E4</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 컴포넌트 미리보기 ── -->
+  <section>
+    <h2>Components</h2>
+    <div class="grid2">
+      <div class="card">
+        <h2>Buttons</h2>
+        <div class="gap-12">
+          <button class="btn btn-primary">수집 시작</button>
+          <button class="btn btn-secondary">새로고침</button>
+          <button class="btn btn-danger">전체 정지</button>
+          <button class="btn btn-ghost">취소</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Badges</h2>
+        <div class="gap-12">
+          <span class="badge badge-success"><span class="badge-dot" style="background:#06C270;"></span>완료</span>
+          <span class="badge badge-error">  <span class="badge-dot" style="background:#F04452;"></span>오류 2/3</span>
+          <span class="badge badge-warning"><span class="badge-dot" style="background:#F5A623;"></span>정지</span>
+          <span class="badge badge-info">   <span class="badge-dot" style="background:#A99AF8;"></span>수집중</span>
+          <span class="badge badge-neutral"><span class="badge-dot" style="background:var(--text-tertiary);"></span>대기</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Input &amp; Select</h2>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div class="input-wrap">
+            <label class="input-label">심볼 검색</label>
+            <input placeholder="BTC, ETH, SOL..." />
+          </div>
+          <div class="input-wrap">
+            <label class="input-label">인터벌 선택</label>
+            <div class="select-trigger">
+              <span>5분</span>
+              <span class="chevron">▾</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Toggle</h2>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div class="toggle-wrap">
+            <div class="toggle-track on"><div class="toggle-thumb"></div></div>
+            <span class="toggle-label">수집 활성화</span>
+          </div>
+          <div class="toggle-wrap">
+            <div class="toggle-track off"><div class="toggle-thumb"></div></div>
+            <span class="toggle-label" style="color:var(--text-secondary);">알림 비활성</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 테이블 ── -->
+  <section>
+    <h2>Table · 수집 현황 대시보드</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>심볼</th>
+            <th>인터벌</th>
+            <th>상태</th>
+            <th>현재가</th>
+            <th>등락률</th>
+            <th>마지막 수집</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:600;">BTC/USDT</td>
+            <td style="color:var(--text-secondary);">5분</td>
+            <td><span class="badge badge-success"><span class="badge-dot" style="background:#06C270;"></span>완료</span></td>
+            <td class="font-mono">82,400.00</td>
+            <td class="font-mono" style="color:#F04452;">+2.34%</td>
+            <td style="color:var(--text-tertiary); font-size:12px;">14:32:00</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;">ETH/USDT</td>
+            <td style="color:var(--text-secondary);">1분</td>
+            <td><span class="badge badge-info"><span class="badge-dot" style="background:#A99AF8;"></span>수집중</span></td>
+            <td class="font-mono">3,241.50</td>
+            <td class="font-mono" style="color:#4066E4;">-1.12%</td>
+            <td style="color:var(--text-tertiary); font-size:12px;">14:32:05</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;">SOL/USDT</td>
+            <td style="color:var(--text-secondary);">15분</td>
+            <td><span class="badge badge-error"><span class="badge-dot" style="background:#F04452;"></span>오류 2/3</span></td>
+            <td class="font-mono">142.80</td>
+            <td class="font-mono" style="color:#4066E4;">-0.55%</td>
+            <td style="color:var(--text-tertiary); font-size:12px;">14:30:15</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600;">XRP/USDT</td>
+            <td style="color:var(--text-secondary);">60분</td>
+            <td><span class="badge badge-warning"><span class="badge-dot" style="background:#F5A623;"></span>정지</span></td>
+            <td class="font-mono">0.5821</td>
+            <td class="font-mono" style="color:#F04452;">+0.87%</td>
+            <td style="color:var(--text-tertiary); font-size:12px;">13:00:00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <script>
+    const TOKENS = {
+      dark: {
+        base: '#12111A', surface: '#1C1B2E', elevated: '#252440',
+        input: '#181728', overlay: '#2D2C4A',
+        textPrimary: '#EEEDF8', textSecondary: '#9490B5',
+        textTertiary: '#615D82', textDisabled: '#403D5E',
+      },
+      light: {
+        base: '#F2F1FF', surface: '#FFFFFF', elevated: '#EEEAFF',
+        input: '#F8F7FF', overlay: '#E9E6FF',
+        textPrimary: '#18162E', textSecondary: '#4D4975',
+        textTertiary: '#8C88B0', textDisabled: '#C0BDE0',
+      },
+    }
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme)
+
+      // 배경 hex 업데이트
+      const t = TOKENS[theme]
+      document.getElementById('hex-base').textContent = t.base
+      document.getElementById('hex-surface').textContent = t.surface
+      document.getElementById('hex-elevated').textContent = t.elevated
+      document.getElementById('hex-input').textContent = t.input
+      document.getElementById('hex-overlay').textContent = t.overlay
+      document.getElementById('hex-text-primary').textContent = t.textPrimary
+      document.getElementById('hex-text-secondary').textContent = t.textSecondary
+      document.getElementById('hex-text-tertiary').textContent = t.textTertiary
+      document.getElementById('hex-text-disabled').textContent = t.textDisabled
+
+      // bg-layer inline style 업데이트
+      const layers = document.querySelectorAll('.bg-layer')
+      const bgKeys = ['base', 'surface', 'elevated', 'input', 'overlay']
+      const cssVars = ['--bg-base','--bg-surface','--bg-elevated','--bg-input','--bg-overlay']
+      layers.forEach((el, i) => el.style.background = `var(${cssVars[i]})`)
+
+      // 버튼 상태
+      document.getElementById('btn-light').classList.toggle('active', theme === 'light')
+      document.getElementById('btn-dark').classList.toggle('active',  theme === 'dark')
+    }
+
+    // 초기 실행
+    setTheme('dark')
+  </script>
+</body>
+</html>

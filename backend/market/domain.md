@@ -108,6 +108,9 @@ companion object {
 - `symbolIdentifier`와 `interval` 조합은 unique
 - `collectStart()` 호출 시 `STARTABLE_STATUS` 또는 (`AUTO_RETRYABLE_STATUS`이면서 `retryCount < MAX_RETRY_COUNT`)에 포함되어야 함
 - `collectComplete()` 호출 시 `COLLECTING` 또는 `PAUSED` 상태여야 함, `retryCount` 초기화
+  > PAUSED 허용 이유: `collectStart()` 후 Kafka Command가 이미 발행된 상태에서 pause가 걸릴 수 있다.
+  > Exchange Reply는 이미 in-flight이므로 응답이 도착하면 `collectComplete()`가 정상 호출된다.
+  > 이 경우 PAUSED → COLLECTED로 전이하여 수집된 데이터는 유효하게 저장된다.
 - `collectFail()` 호출 시 `COLLECTING` 또는 `PAUSED` 상태여야 함, `retryCount` 증가
 - `collectPause()` 호출 시 `PAUSABLE_STATUS`에 포함되어야 함
 - `COLLECTING` 상태에서만 `ERROR`로 전이 가능 (PAUSED 상태에서는 유지)
@@ -249,7 +252,7 @@ enum class MarketCandleInterval(
     MIN_5(3, 1, TimeSpan.ofMinutes(5)),      // 5분봉 ← MIN_1
     MIN_10(4, 3, TimeSpan.ofMinutes(10)),    // 10분봉 ← MIN_5
     MIN_15(5, 3, TimeSpan.ofMinutes(15)),    // 15분봉 ← MIN_5
-    MIN_30(6, 5, TimeSpan.ofMinutes(30)),    // 30분봉 ← MIN_5
+    MIN_30(6, 3, TimeSpan.ofMinutes(30)),    // 30분봉 ← MIN_5
     MIN_60(7, 6, TimeSpan.ofMinutes(60)),    // 60분봉 ← MIN_30
     MIN_120(8, 7, TimeSpan.ofMinutes(120)),  // 120분봉 ← MIN_60
     MIN_180(9, 7, TimeSpan.ofMinutes(180)),  // 180분봉 ← MIN_60
@@ -590,9 +593,9 @@ interface CreateMarketCandleUseCase {
 - 각 간격은 `baseInterval` 기준으로 계산
 
 ### 11.3 수집 실패 처리
-- 상태를 ERROR로 변경
-- 1분 후 스케줄러가 자동 재시도
-- 무한 재시도 (사용자 수동 중지 필요)
+- 상태를 ERROR로 변경, `retryCount` 1 증가
+- 1분 후 스케줄러가 자동 재시도 (`retryCount < MAX_RETRY_COUNT = 3` 조건 충족 시)
+- 3회 초과 시 자동 재시도 중단 → 수동 복구 필요 (`PUT /tasks/{id}/resume`)
 
 ### 11.4 데이터 검증
 - OHLC 관계 검증 (Factory에서 수행)

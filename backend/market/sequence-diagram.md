@@ -156,7 +156,7 @@ sequenceDiagram
 
     alt 필터링 후 데이터 없음
         Service->>Task: collectComplete()
-        Note over Task: lastCollectedTime += 5분<br/>status = COLLECTED
+        Note over Task: lastCollectedTime += interval.timeSpan (MIN_1 → +1분)<br/>status = COLLECTED<br/>(동일 시간 범위 반복 조회 방지)
         Service->>DB: UPDATE task
     else 필터링 후 데이터 있음
         Service->>Service: fillMissingCandles(task, candles)
@@ -716,32 +716,35 @@ spring:
 
 ## 11. Outbox 패턴
 
-### 11.1 개요
+> 공통 설계 (엔티티 템플릿, Relay Processor, DB 스키마, TraceId 전파 원리)는
+> [outbox-pattern.md](../outbox-pattern.md) 참조
 
-트랜잭션 커밋 후 Kafka 발행 실패 시 Task가 `COLLECTING` 상태에 고착되는 문제를 해결하기 위해 **Transactional Outbox 패턴**을 적용합니다.
+### 11.1 Market Service 적용 범위
 
-**문제**: Task 상태 변경(DB) + Kafka 발행은 원자적으로 처리되지 않아 Kafka 발행 실패 시 상태 불일치 발생
-**해결**: Task 상태 변경과 Outbox 레코드 INSERT를 **동일 트랜잭션**으로 묶고, 별도 Relay Processor가 Kafka 발행 보장
+| 발행 시점 | Outbox eventType | Kafka 토픽 |
+|-----------|-----------------|------------|
+| `collectStart()` 트랜잭션 내 | `FIND_ALL_MARKET_CANDLE_COMMAND` | `FIND_ALL_MARKET_CANDLE_COMMAND_TOPIC` |
+| `collectMarketCandle()` 트랜잭션 내 | `MARKET_CANDLE_COLLECTED_EVENT` | `MARKET_CANDLE_COLLECT_TASK_EVENT_TOPIC` |
 
-**적용 범위**:
-- `collectStart()` → `FIND_ALL_MARKET_CANDLE_COMMAND` 발행
-- `collectMarketCandle()` → `MarketCandleCollectTaskCollectedEvent` 발행
+**적용 이유**: Task 상태 변경(DB)과 Kafka 발행이 동시에 발생하며,
+발행 실패 시 Task가 `COLLECTING` 상태에 고착되어 수집이 멈추는 치명적 문제가 생기기 때문.
 
-### 11.2 Outbox 엔티티
+### 11.2 MarketOutboxEvent 엔티티
 
 ```kotlin
 class MarketOutboxEvent(
-    val id: UUID,                      // 이벤트 ID
-    val aggregateType: String,         // 집계 타입 (예: MarketCandleCollectTask)
-    val aggregateId: String,           // 집계 ID
-    val eventType: String,             // 이벤트 타입 (예: FIND_ALL_MARKET_CANDLE_COMMAND)
+    val id: UUID,
+    val aggregateType: String,         // MarketCandleCollectTask
+    val aggregateId: String,           // Task UUID
+    val eventType: String,             // FIND_ALL_MARKET_CANDLE_COMMAND | MARKET_CANDLE_COLLECTED_EVENT
     val payload: String,               // JSON 직렬화 페이로드
-    var status: OutboxStatus,          // PENDING → PUBLISHED / FAILED
+    val traceId: String?,              // 원본 요청 traceId (MDC에서 캡처)
+    val parentSpanId: String?,         // 원본 요청 spanId (MDC에서 캡처)
+    var status: OutboxStatus,          // PENDING | PUBLISHED | FAILED | DEAD
+    var retryCount: Int = 0,           // Kafka 발행 실패 횟수 (MAX: 3)
     val createdAt: OffsetDateTime,
     var publishedAt: OffsetDateTime?,
 )
-
-enum class OutboxStatus { PENDING, PUBLISHED, FAILED }
 ```
 
 ### 11.3 Outbox 발행 플로우
@@ -756,28 +759,50 @@ sequenceDiagram
     Note over Service: collectStart() 트랜잭션 내
     Service->>DB: BEGIN TRANSACTION
     Service->>DB: UPDATE tasks status = COLLECTING
-    Service->>DB: INSERT market_outbox (status=PENDING)<br/>payload: FIND_ALL_MARKET_CANDLE_COMMAND
+    Service->>DB: INSERT market_outbox (status=PENDING, traceId 포함)
     Service->>DB: COMMIT TRANSACTION
-    Note over Service: 트랜잭션 종료 (Kafka 발행 없음)
 
-    Note over Relay: 주기적 폴링 (100ms)
-    Relay->>DB: SELECT * FROM market_outbox<br/>WHERE status = PENDING<br/>ORDER BY created_at LIMIT 100
-
-    loop 각 Outbox 이벤트
-        Relay->>Kafka: Publish (eventType, payload)
-        alt 발행 성공
-            Relay->>DB: UPDATE status = PUBLISHED,<br/>published_at = NOW()
-        else 발행 실패
-            Relay->>DB: UPDATE status = FAILED
-            Note over Relay: 다음 폴링 사이클에서 재시도
-        end
-    end
+    Note over Relay: 폴링 (100ms) — 상세 로직은 outbox-pattern.md 참조
+    Relay->>DB: SELECT PENDING + 재시도 가능 FAILED
+    Relay->>Kafka: Publish + traceparent 헤더
+    Relay->>DB: UPDATE status (PUBLISHED / FAILED / DEAD)
 ```
 
-**핵심 원칙**:
-- Task 상태 변경 + Outbox INSERT는 **동일 트랜잭션** 내에서 처리 (원자성 보장)
-- Kafka 발행 실패 시 `FAILED` 상태로 남아 다음 폴링에서 재시도
-- 멱등성 보장: Kafka 메시지에 `taskId`를 포함하여 Consumer에서 중복 처리 방지
+### 11.4 TraceId 전파 결과
+
+```
+collectStart() 호출 (traceId: abc-123)
+  └─ Outbox INSERT       (abc-123 저장)
+[Relay 스케줄러 스레드]
+  └─ Kafka 발행          (abc-123 복원) → Exchange Consumer → Reply 처리
+```
+
+---
+
+## 12. Outbox DB 스키마 (Market Service)
+
+```sql
+-- 공통 스키마 템플릿은 outbox-pattern.md 참조. Market Service 전용 테이블:
+CREATE TABLE market_outbox (
+    id               UUID    PRIMARY KEY,
+    aggregate_type   VARCHAR NOT NULL,                    -- MarketCandleCollectTask
+    aggregate_id     VARCHAR NOT NULL,                    -- Task UUID
+    event_type       VARCHAR NOT NULL,                    -- 이벤트/커맨드 타입
+    payload          TEXT    NOT NULL,
+    trace_id         VARCHAR,
+    parent_span_id   VARCHAR,
+    status           VARCHAR NOT NULL DEFAULT 'PENDING', -- PENDING | PUBLISHED | FAILED | DEAD
+    retry_count      INT     NOT NULL DEFAULT 0,
+    created_at       TIMESTAMP WITH TIME ZONE NOT NULL,
+    published_at     TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX market_outbox_relay_idx ON market_outbox (status, retry_count, created_at)
+    WHERE status IN ('PENDING', 'FAILED');
+
+CREATE INDEX market_outbox_dead_idx ON market_outbox (created_at)
+    WHERE status = 'DEAD';
+```
 
 ---
 
@@ -789,3 +814,4 @@ sequenceDiagram
 - **이벤트**: Spring ApplicationEvent + Kafka
 - **재시도**: 스케줄러 기반 자동 재시도 (retryCount 기반, MAX_RETRY_COUNT = 3)
 - **Outbox**: Transactional Outbox 패턴으로 Kafka 발행 보장
+- **분산 트레이싱**: Outbox에 traceId / parentSpanId 저장 → Relay에서 `traceparent` 헤더로 복원

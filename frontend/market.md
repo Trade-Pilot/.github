@@ -111,7 +111,8 @@ src/
 │       │   ├── collectTaskApi.ts   # 수집 작업 REST API
 │       │   └── candleApi.ts        # 캔들 REST API
 │       ├── model/
-│       │   ├── types.ts            # 도메인 타입
+│       │   ├── enums.ts            # Enum 정의 (MarketType, MarketCandleCollectStatus 등)
+│       │   ├── schemas.ts          # Zod 스키마 + z.infer 타입 export (단일 진실 공급원)
 │       │   └── parsers.ts          # API 응답 → 도메인 모델 변환
 │       ├── queries/
 │       │   ├── useSymbolsQuery.ts          # TanStack Query: 심볼 목록
@@ -140,11 +141,18 @@ src/
 
 ---
 
-## 3. 공통 도메인 타입 (`entities/market/model/types.ts`)
+## 3. 공통 도메인 타입
 
-### 3.1 Enum
+> **단일 스키마 원칙**: 도메인 모델 타입은 `interface`로 이중 선언하지 않습니다.
+> Zod 스키마 하나에서 런타임 검증과 TypeScript 타입을 함께 얻습니다.
+
+### 3.1 Enum (`entities/market/model/enums.ts`)
+
+Enum은 Zod `z.nativeEnum()`과 함께 사용되므로 별도 파일에 유지합니다.
+JavaScript 런타임 값이 필요하기 때문에 `z.infer`로 대체할 수 없습니다.
 
 ```typescript
+// entities/market/model/enums.ts
 export enum MarketType {
   COIN  = 'COIN',
   STOCK = 'STOCK',
@@ -183,74 +191,101 @@ export enum MarketCandleCollectStatus {
 }
 ```
 
-### 3.2 도메인 모델
+### 3.2 도메인 모델 스키마 (`entities/market/model/schemas.ts`)
+
+`interface` 선언 없이 Zod 스키마에서 `z.infer`로 타입을 추출합니다.
+스키마와 타입이 항상 동기화되어 불일치 버그가 구조적으로 불가능합니다.
 
 ```typescript
-export interface MarketSymbol {
-  id: string
-  code: string                        // 예: KRW-BTC
-  name: string                        // 예: 비트코인
-  market: MarketType
-  status: MarketSymbolStatus
-  createdAt: Date
-  updatedAt: Date
-}
+// entities/market/model/schemas.ts
+import { z } from 'zod'
+import {
+  MarketCandleCollectStatus,
+  MarketCandleInterval,
+  MarketSymbolStatus,
+  MarketType,
+} from './enums'
 
-export interface MarketCandleCollectTask {
-  id: string
-  symbolId: string
-  symbol?: MarketSymbol
-  interval: MarketCandleInterval
-  status: MarketCandleCollectStatus
-  retryCount: number                  // 자동 재시도 횟수
-  createdAt: Date
-  lastCollectedAt: Date | null
-  lastCollectedPrice: number | null
-}
+// ── 심볼 ──────────────────────────────────────────────────────
+export const MarketSymbolSchema = z.object({
+  identifier:   z.string().uuid(),
+  code:         z.string().regex(/^[A-Z]+-[A-Z]+$/),  // 예: KRW-BTC
+  name:         z.string(),
+  market:       z.nativeEnum(MarketType),
+  status:       z.nativeEnum(MarketSymbolStatus),
+  createdDate:  z.string().datetime(),
+  modifiedDate: z.string().datetime(),
+})
 
-export interface MarketCandle {
-  symbolId: string
-  interval: MarketCandleInterval
-  time: Date
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-  amount: number
-  isFlat: boolean                     // volume === 0: Flat Candle 여부
-}
+// interface 선언 없이 스키마에서 타입 추출 — 단일 진실 공급원
+export type MarketSymbol = z.infer<typeof MarketSymbolSchema>
+
+// ── 수집 작업 ────────────────────────────────────────────────
+export const CollectTaskSchema = z.object({
+  identifier:         z.string().uuid(),
+  symbolIdentifier:   z.string().uuid(),                 // FK → MarketSymbol.identifier
+  symbol:             MarketSymbolSchema.optional(),      // JOIN 시 포함
+  interval:           z.nativeEnum(MarketCandleInterval),
+  status:             z.nativeEnum(MarketCandleCollectStatus),
+  retryCount:         z.number().int().min(0),
+  createdDate:        z.string().datetime(),
+  lastCollectedTime:  z.string().datetime().nullable(),  // ← lastCollectedAt 아님
+  lastCollectedPrice: z.string().nullable(),             // BigDecimal → string
+})
+
+export type MarketCandleCollectTask = z.infer<typeof CollectTaskSchema>
+
+// ── 캔들 ──────────────────────────────────────────────────────
+export const MarketCandleSchema = z.object({
+  symbolIdentifier: z.string().uuid(),
+  interval:         z.nativeEnum(MarketCandleInterval),
+  time:             z.string().datetime(),
+  open:             z.string(),   // BigDecimal → string (정밀도 손실 방지)
+  high:             z.string(),
+  low:              z.string(),
+  close:            z.string(),
+  volume:           z.string(),
+  amount:           z.string(),
+  isFlat:           z.boolean(),  // volume === 0: Flat Candle 여부
+})
+
+export type MarketCandle = z.infer<typeof MarketCandleSchema>
+
+// ── 통계 ──────────────────────────────────────────────────────
+export const CollectTaskStatsSchema = z.object({
+  total:       z.number().int(),
+  byStatus:    z.record(z.nativeEnum(MarketCandleCollectStatus), z.number()),
+  byMarketType: z.record(z.nativeEnum(MarketType), z.number()),
+})
+
+export type CollectTaskStats = z.infer<typeof CollectTaskStatsSchema>
 ```
 
-### 3.3 통계 타입
+### 3.3 API 파라미터 타입 (`entities/market/model/params.ts`)
+
+요청 파라미터는 API 응답이 아니므로 런타임 검증이 불필요합니다.
+`interface`를 그대로 사용합니다.
 
 ```typescript
-export interface CollectTaskStats {
-  total: number
-  byStatus: Record<MarketCandleCollectStatus, number>
-  byMarketType: Record<MarketType, number>
-}
-```
+// entities/market/model/params.ts
+import type { MarketCandleCollectStatus, MarketCandleInterval, MarketType } from './enums'
 
-### 3.4 API 파라미터 타입
-
-```typescript
 export interface CollectTaskListParams {
-  keyword?: string
-  statuses?: MarketCandleCollectStatus[]
-  market?: MarketType[]
-  intervals?: MarketCandleInterval[]
-  symbolCursor?: string
+  keyword?:        string
+  statuses?:       MarketCandleCollectStatus[]
+  market?:         MarketType[]
+  intervals?:      MarketCandleInterval[]
+  symbolCursor?:   string
   intervalCursor?: MarketCandleInterval
-  limit?: number
+  limit?:          number
 }
 
 export interface CandleListParams {
-  symbolId: string
-  interval: MarketCandleInterval
-  cursor?: string                     // ISO 8601 timestamp
-  limit?: number                      // 기본값: 200
-  orderBy?: 'ASC' | 'DESC'
+  symbolId:   string
+  interval:   MarketCandleInterval
+  cursor?:    string           // ISO 8601 timestamp
+  limit?:     number           // 기본값: 200
+  orderBy?:   'ASC' | 'DESC'
 }
 ```
 
@@ -407,7 +442,12 @@ export const useAuthStore = create<AuthState>()(
       setToken: (token) => set({ token, isAuthenticated: true }),
       logout: () => set({ token: null, user: null, isAuthenticated: false }),
     }),
-    { name: 'auth-storage' }          // localStorage 자동 직렬화
+    {
+      name: 'auth-storage',
+      // ⚠️ 보안 정책: AT(Access Token)은 절대 localStorage에 저장하지 않음 (XSS 탈취 위험)
+      // token은 Zustand 메모리에만 유지 — 페이지 새로고침 시 재로그인 필요
+      partialize: (state) => ({ user: state.user }),  // user 정보만 persist, token 제외
+    }
   )
 )
 ```
@@ -510,14 +550,18 @@ const useCollectionPage = () => {
 
 #### 상태별 스타일
 
-| 상태 | Tailwind 클래스 | 설명 |
-|------|----------------|------|
-| `CREATED` | `bg-gray-100 text-gray-600` | 수집 전 |
-| `COLLECTING` | `bg-blue-100 text-blue-700 animate-pulse` | 수집 중 |
-| `COLLECTED` | `bg-green-100 text-green-700` | 완료 |
-| `ERROR` | `bg-red-100 text-red-700` | 실패 (retryCount 표시) |
-| `PAUSED` | `bg-yellow-100 text-yellow-700` | 정지 |
-| `DELISTED` | `bg-gray-200 text-gray-400` | 폐지 |
+| 상태 | Tailwind 클래스 (토큰 시스템) | 설명 |
+|------|-------------------------------|------|
+| `CREATED`    | `bg-bg-elevated text-text-tertiary`                          | 수집 전 |
+| `COLLECTING` | `bg-semantic-info/15 text-semantic-info animate-pulse`       | 수집 중 |
+| `COLLECTED`  | `bg-semantic-success/15 text-semantic-success`               | 완료 |
+| `ERROR`      | `bg-semantic-danger/15 text-semantic-danger`                 | 실패 (retryCount 표시) |
+| `PAUSED`     | `bg-semantic-warning/15 text-semantic-warning`               | 정지 |
+| `DELISTED`   | `bg-bg-elevated text-text-disabled`                          | 폐지 |
+
+> `semantic-*` 토큰은 `tailwind.config.ts` Section 4의 `semantic` 섹션에 정의됩니다.
+> 투명도 수식어(`/15`)를 사용하려면 hex 값 대신 RGB CSS 변수 형식이어야 합니다.
+> setup.md Section 4의 tailwind.config.ts `semantic` 항목을 CSS 변수 형식으로 유지하세요.
 
 ---
 
@@ -580,21 +624,31 @@ interface CandleChartProps {
 }
 
 // Lightweight Charts 구성
+// ⚠️ Lightweight Charts는 CSS 변수를 직접 지원하지 않으므로
+//    현재 테마에 맞는 색상을 JS로 읽어 적용
+const isDark = document.documentElement.classList.contains('dark')
+
 const chart = createChart(containerRef.current, {
   layout: {
-    background: { color: '#0f172a' },  // 다크 테마
-    textColor:  '#94a3b8',
+    background: { color: isDark ? '#1C1B2E' : '#FFFFFF' },  // bg-surface
+    textColor:  isDark ? '#9490B5'  : '#4D4975',             // text-secondary
+  },
+  grid: {
+    vertLines: { color: isDark ? '#252440' : '#E4E1F8' },    // border
+    horzLines: { color: isDark ? '#252440' : '#E4E1F8' },
   },
   crosshair: { mode: CrosshairMode.Normal },
 })
 
+// ⚠️ 한국 주식 컨벤션: 빨강 = 상승(양봉), 파랑 = 하락(음봉)
+//    setup.md Section 5.1 색상 토큰과 반드시 일치시킬 것
 const candleSeries = chart.addCandlestickSeries({
-  upColor:        '#22c55e',         // 상승봉 초록
-  downColor:      '#ef4444',         // 하락봉 빨강
-  borderUpColor:  '#22c55e',
-  borderDownColor:'#ef4444',
-  wickUpColor:    '#22c55e',
-  wickDownColor:  '#ef4444',
+  upColor:         '#F04452',   // 상승봉 ← 빨강 (한국)
+  downColor:       '#4066E4',   // 하락봉 ← 파랑 (한국)
+  borderUpColor:   '#F04452',
+  borderDownColor: '#4066E4',
+  wickUpColor:     '#F04452',
+  wickDownColor:   '#4066E4',
 })
 
 const volumeSeries = chart.addHistogramSeries({
@@ -658,10 +712,11 @@ const useChartPage = () => {
   const candlesQuery       = useCandlesInfiniteQuery(symbolId, interval)
   const { realtimeCandle, isConnected } = useCandleWebSocket(symbolId, interval)
 
-  const selectedSymbol = symbolsQuery.data?.find(s => s.id === symbolId)
+  // ✅ MarketSymbol의 PK 필드명은 'identifier' (id 아님)
+  const selectedSymbol = symbolsQuery.data?.find(s => s.identifier === symbolId)
 
   const changeSymbol = (symbol: MarketSymbol) => {
-    setSearchParams({ symbolId: symbol.id, interval }, { replace: true })
+    setSearchParams({ symbolId: symbol.identifier, interval }, { replace: true })
   }
 
   const changeInterval = (next: MarketCandleInterval) => {
@@ -672,7 +727,8 @@ const useChartPage = () => {
     symbols:        symbolsQuery.data ?? [],
     selectedSymbol,
     interval,
-    candles:        candlesQuery.data?.candles ?? [],
+    // InfiniteQuery는 pages 배열 구조 — flatMap으로 단일 배열로 펼침
+    candles:        candlesQuery.data?.pages.flatMap(page => page) ?? [],
     isLoadingCandles: candlesQuery.isLoading,
     hasMoreCandles: candlesQuery.hasNextPage,
     loadMoreCandles: candlesQuery.fetchNextPage,
@@ -818,10 +874,11 @@ apiClient.interceptors.response.use(
 - [ ] FSD 디렉토리 구조 생성
 
 ### Phase 2: 공통 레이어
-- [ ] `shared/api/types.ts`: Enum, API 응답 타입
+- [ ] `entities/market/model/enums.ts`: Enum 정의
+- [ ] `entities/market/model/schemas.ts`: Zod 스키마 + z.infer 타입 export
+- [ ] `entities/market/model/params.ts`: 요청 파라미터 interface
 - [ ] `shared/store/authStore.ts`: Zustand 인증 상태
 - [ ] `shared/ui`: Spinner, Badge, EmptyState, ErrorBoundary
-- [ ] `entities/market/model/types.ts`: 도메인 타입
 - [ ] `entities/market/api/`: REST API 함수 (symbolApi, collectTaskApi, candleApi)
 - [ ] `entities/market/queries/`: TanStack Query 훅 4개
 

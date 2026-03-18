@@ -46,6 +46,7 @@
 **진행률 추적**:
 - 0~100% 실시간 진행률 표시
 - 예상 완료 시간 계산
+- **Server-Sent Events(SSE)로 프론트엔드에 실시간 스트리밍** — `GET /simulations/{id}/progress` 엔드포인트
 
 ### 2. Time Travel 엔진
 ```
@@ -221,7 +222,7 @@ Window 2:
 - [ ] 수수료 시뮬레이션 (0.05%)
 - [ ] 슬리피지 시뮬레이션 (0.1%)
 - [ ] 포트폴리오 관리
-- [ ] 진행률 추적
+- [ ] 진행률 추적 (SSE 스트리밍 포함)
 
 ### Phase 3: 성과 측정 (2주)
 - [ ] 수익률 계산
@@ -273,6 +274,12 @@ GET /simulations/{simulationId}/trades
 
 GET /simulations/{simulationId}/snapshots
 → 자산 변동 스냅샷 조회
+
+GET /simulations/{simulationId}/progress
+→ 시뮬레이션 진행률 SSE 스트리밍 (Accept: text/event-stream)
+  응답 형식:
+    data: {"simulationId": "uuid", "progress": 42, "status": "RUNNING", "processedCandles": 210000, "totalCandles": 500000}
+    data: {"simulationId": "uuid", "progress": 100, "status": "COMPLETED", "result": {...}}
 
 GET /simulations/{simulationId}/report.pdf
 → 리포트 다운로드
