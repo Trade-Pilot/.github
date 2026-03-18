@@ -77,7 +77,51 @@
 
 ---
 
-## 2. 서비스 간 통신 원칙
+## 2. 헥사고날 아키텍처 네이밍 규칙
+
+모든 서비스에 동일하게 적용되는 네이밍 컨벤션이다.
+
+### Output Port (domain/port/out)
+
+외부 시스템·저장소와의 의존 역전을 표현하는 인터페이스.
+
+| 유형 | 형식 | 예시 |
+|------|------|------|
+| 조회 | `Find{도메인}Output` | `FindMarketCandleOutput`, `FindStrategyOutput` |
+| 저장 | `Save{도메인}Output` | `SaveStrategyOutput`, `SaveSignalOutput` |
+| 삭제 | `Delete{도메인}Output` | `DeleteNotificationLogOutput` |
+| 발행 | `Publish{도메인}Output` | `PublishOutboxOutput` |
+
+### Output Adapter (infrastructure)
+
+Output Port를 구현하는 인프라 클래스. **`{도메인}{방식}Adapter`** 형식을 따른다.
+
+| 방식 | 형식 | 예시 |
+|------|------|------|
+| JPA (DB) | `{도메인}JpaAdapter` | `StrategyJpaAdapter`, `PortfolioJpaAdapter` |
+| gRPC | `{도메인}GrpcAdapter` | `MarketGrpcAdapter` |
+| Kafka | `{도메인}KafkaAdapter` | `OutboxKafkaAdapter` |
+
+```
+// 포트와 어댑터의 관계 예시
+domain/port/out/FindMarketCandleOutput.kt  ← 인터페이스 (포트)
+infrastructure/grpc/MarketGrpcAdapter.kt   ← 구현체 (어댑터)
+
+domain/port/out/FindStrategyOutput.kt      ← 인터페이스 (포트)
+infrastructure/persistence/StrategyJpaAdapter.kt ← 구현체 (어댑터)
+```
+
+### Input Port (domain/port/in)
+
+애플리케이션 진입점을 표현하는 인터페이스 (Use Case).
+
+| 형식 | 예시 |
+|------|------|
+| `{행위}{도메인}UseCase` | `AnalyzeAgentUseCase`, `CreateStrategyUseCase` |
+
+---
+
+## 3. 서비스 간 통신 원칙
 
 ### 기본 규칙
 
@@ -277,7 +321,7 @@ class UserEventEnvelope(
 
 ---
 
-## 3. Kafka 토픽 전체 맵
+## 4. Kafka 토픽 전체 맵
 
 > 표에는 **실제 Kafka 토픽 이름**을 기재한다. Kotlin 상수 이름은 괄호 안에 병기.
 
@@ -349,7 +393,7 @@ VirtualTrade와 Trade는 동일한 Agent command 토픽으로 발행하되, Enve
 
 ---
 
-## 4. 인증/인가 전략
+## 5. 인증/인가 전략
 
 > 자세한 내용은 [auth-strategy.md](./auth-strategy.md) 참조
 
@@ -574,7 +618,7 @@ INSERT INTO endpoint_permission (http_method, path_pattern, required_role, descr
 
 ---
 
-## 5. Observability - 분산 트레이싱
+## 6. Observability - 분산 트레이싱
 
 > Outbox 패턴 상세 설계 (엔티티, Relay, DB 스키마, 서비스별 적용 범위)는
 > [outbox-pattern.md](./outbox-pattern.md) 참조
@@ -620,7 +664,7 @@ class MdcContextFilter : OncePerRequestFilter() {
 
 ---
 
-## 6. 데이터베이스 전략
+## 7. 데이터베이스 전략
 
 ### Database per Service — 별도 인스턴스
 
@@ -665,7 +709,7 @@ class MdcContextFilter : OncePerRequestFilter() {
 
 ---
 
-## 7. Exchange Service — Rate Limit 풀 분리
+## 8. Exchange Service — Rate Limit 풀 분리
 
 ### Rate Limit 풀 분리
 
@@ -692,7 +736,7 @@ Exchange Service
 
 ---
 
-## 8. 실시간 데이터 전달 — Server-Sent Events (SSE)
+## 9. 실시간 데이터 전달 — Server-Sent Events (SSE)
 
 클라이언트가 서버로부터 실시간으로 진행 상태를 수신해야 하는 경우 SSE를 사용한다.
 
@@ -712,7 +756,7 @@ fun streamProgress(
 
 ---
 
-## 09. 기술 스택 요약
+## 10. 기술 스택 요약
 
 | 영역            | 기술                                        |
 | ------------- | ----------------------------------------- |
