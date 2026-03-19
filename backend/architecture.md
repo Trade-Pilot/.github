@@ -65,14 +65,14 @@
 
 | 서비스                  | 책임                      | 설계 상태           |
 | -------------------- | ----------------------- | --------------- |
-| API Gateway          | JWT 검증, 라우팅, Rate Limit | 설계 필요           |
+| API Gateway          | JWT 검증, 라우팅, Rate Limit | ✅ 설계 완료         |
 | User Service         | 계정 관리, 인증, JWT 발급/갱신    | ✅ 설계 완료         |
-| Exchange Service     | 거래소 API 어댑터 (업비트 등)     | 설계 필요           |
+| Exchange Service     | 거래소 API 어댑터 (업비트 등)     | ✅ 설계 완료         |
 | Market Service       | 심볼/캔들 수집·저장             | ✅ 설계 완료         |
-| Agent Service        | 전략 관리, 신호 생성, 기술적 지표    | 설계 필요           |
-| Simulation Service   | 백테스팅 (TimeTravelEngine) | 설계 필요           |
-| VirtualTrade Service | 실시간 가상거래                | 설계 필요           |
-| Trade Service        | 실제 거래 실행                | 설계 예정 (Phase 4) |
+| Agent Service        | 전략 관리, 신호 생성, 기술적 지표    | ✅ 설계 완료         |
+| Simulation Service   | 백테스팅 (TimeTravelEngine) | ✅ 설계 완료         |
+| VirtualTrade Service | 실시간 가상거래                | ✅ 설계 완료         |
+| Trade Service        | 실제 거래 실행                | ✅ 설계 완료         |
 | Notification Service | 알림 채널 관리, 메시지 발송        | ✅ 설계 완료         |
 
 ---
@@ -356,14 +356,29 @@ VirtualTrade와 Trade는 동일한 Agent command 토픽으로 발행하되, Enve
 > **Simulation ↔ Agent 통신은 gRPC 사용** (Section 2 예외 규칙 참조)
 > **Agent ↔ Market 캔들 데이터 조회는 gRPC 사용** (Section 2 예외 규칙 참조)
 
-### Trade ↔ Exchange
+### VirtualTrade / Trade → Agent (체결 확정 이벤트)
 
 | 실제 토픽 이름 (상수 이름) | 발행 | 구독 | 설명 |
 |--------------------------|------|------|------|
-| `command.exchange.trade.place-order`<br>(`PLACE_ORDER_COMMAND_TOPIC`) | Trade | Exchange | 실주문 실행 요청 |
-| `reply.trade.exchange.place-order`<br>(`PLACE_ORDER_REPLY_TOPIC`) | Exchange | Trade | 실주문 실행 응답 |
-| `command.exchange.trade.cancel-order`<br>(`CANCEL_ORDER_COMMAND_TOPIC`) | Trade | Exchange | 주문 취소 요청 |
-| `reply.trade.exchange.cancel-order`<br>(`CANCEL_ORDER_REPLY_TOPIC`) | Exchange | Trade | 주문 취소 응답 |
+| `event.virtual-trade.execution`<br>(`VIRTUAL_TRADE_EXECUTION_EVENT_TOPIC`) | VirtualTrade | Agent | 가상 체결 확정 이벤트 → Agent 포트폴리오 갱신 |
+| `event.trade.execution`<br>(`TRADE_EXECUTION_EVENT_TOPIC`) | Trade | Agent | 실체결 확정 이벤트 → Agent 포트폴리오 갱신 |
+
+### Agent → VirtualTrade / Trade (에이전트 종료 이벤트)
+
+| 실제 토픽 이름 (상수 이름) | 발행 | 구독 | 설명 |
+|--------------------------|------|------|------|
+| `trade-pilot.agentservice.agent`<br>(`AGENT_TERMINATED_EVENT_TOPIC`) | Agent | VirtualTrade, Trade | 에이전트 종료 → 관련 등록 STOPPED 처리 |
+
+### Trade ↔ Exchange
+
+Exchange Service와의 통신은 Command/Reply 패턴이 아닌 **단방향 Command + 단방향 Event** 패턴을 사용한다.
+주문 제출 후 체결 결과는 Exchange Service가 비동기 이벤트로 발행한다.
+
+| 실제 토픽 이름 (상수 이름) | 발행 | 구독 | 설명 |
+|--------------------------|------|------|------|
+| `command.exchange.submit-order`<br>(`SUBMIT_ORDER_COMMAND_TOPIC`) | Trade | Exchange | 실주문 제출 요청 |
+| `command.exchange.cancel-order`<br>(`CANCEL_ORDER_COMMAND_TOPIC`) | Trade | Exchange | 주문 취소 요청 |
+| `event.exchange.order-status`<br>(`ORDER_STATUS_EVENT_TOPIC`) | Exchange | Trade | 주문 상태 변경 이벤트 (SUBMITTED / PARTIALLY_FILLED / FILLED / CANCELLED / REJECTED) |
 
 ### User → 전체 서비스
 
@@ -388,8 +403,10 @@ VirtualTrade와 Trade는 동일한 Agent command 토픽으로 발행하되, Enve
 | 심볼/캔들 관련 | `symbolIdentifier` |
 | 전략/신호 관련 | `strategyIdentifier` |
 | 주문/거래 관련 | `accountIdentifier` |
+| 체결 확정 이벤트 | `agentIdentifier` |
 | 알림 커맨드 | `userId` |
 | 사용자 생명주기 이벤트 | `userId` |
+| 에이전트 종료 이벤트 | `agentIdentifier` |
 
 ---
 
@@ -772,3 +789,191 @@ fun streamProgress(
 | Observability | OpenTelemetry SDK + Jaeger                |
 | Metrics       | Prometheus + Grafana                      |
 | Logging       | Grafana Loki + Grafana                    |
+
+---
+
+## 11. Kafka DLQ (Dead Letter Queue) 전략
+
+### 개요
+
+Outbox Relay에서 `MAX_RETRY_COUNT(3)` 초과 시 레코드가 `DEAD` 상태가 된다.
+Consumer 측에서도 처리 실패가 반복되면 메시지를 DLQ 토픽으로 라우팅한다.
+DLQ 레코드는 수동 검토 및 재처리를 위한 안전망이다.
+
+### DLQ 토픽 명명 규칙
+
+```
+dlq.{원본 토픽 이름}
+
+예시:
+  dlq.event.virtual-trade.execution
+  dlq.event.trade.execution
+  dlq.trade-pilot.userservice.user
+  dlq.command.notification.send
+```
+
+### Consumer 측 DLQ 처리 패턴
+
+각 서비스의 Kafka Consumer는 다음 원칙을 따른다.
+
+```kotlin
+@KafkaListener(
+    topics = [EVENT_TOPIC],
+    groupId = "service-consumer-group",
+    errorHandler = "kafkaDlqErrorHandler",
+)
+fun onEvent(record: ConsumerRecord<String, String>) {
+    // 비즈니스 처리
+}
+
+// 공통 DLQ 에러 핸들러 (각 서비스 공통 모듈에서 Bean 등록)
+@Bean
+fun kafkaDlqErrorHandler(template: KafkaTemplate<String, String>): CommonErrorHandler =
+    DefaultErrorHandler(
+        DeadLetterPublishingRecoverer(template) { record, _ ->
+            TopicPartition("dlq.${record.topic()}", -1)  // 파티션 자동 할당
+        },
+        FixedBackOff(1000L, 3L)  // 1초 간격, 최대 3회 재시도
+    )
+```
+
+### 처리 흐름
+
+```
+Consumer 처리 실패
+  └─ 1초 간격 자동 재시도 (3회)
+       └─ 재시도 모두 실패
+            └─ DLQ 토픽으로 메시지 이동 (DeadLetterPublishingRecoverer)
+                 └─ 모니터링 알림 (Grafana Alert → Slack/Discord)
+                      └─ 운영자 수동 검토 후 DLQ Consumer로 재처리
+```
+
+### Outbox DEAD 레코드 처리
+
+Outbox Relay가 3회 실패 시 `status = DEAD`로 전환한다.
+
+```
+모니터링: Grafana가 outbox 테이블의 DEAD 레코드 수 알림
+  └─ 운영자 확인 후 Admin API로 수동 재처리
+       PUT /admin/outbox/{id}/retry  (status: DEAD → PENDING, retry_count: 0)
+```
+
+```sql
+-- DEAD 레코드 모니터링 쿼리 (Grafana 데이터소스)
+SELECT COUNT(*) as dead_count, service_name
+FROM outbox
+WHERE status = 'DEAD'
+AND created_at > NOW() - INTERVAL '1 hour'
+GROUP BY service_name;
+```
+
+---
+
+## 12. gRPC Circuit Breaker 전략
+
+### 대상 gRPC 호출
+
+MSA 환경에서 gRPC 서버 장애 시 클라이언트가 무한 대기하거나 스레드풀을 고갈시키는 것을 방지한다.
+
+| 클라이언트 | 서버 | 호출 빈도 | 장애 영향 |
+|------------|------|-----------|-----------|
+| Agent Service | Market Service | 신호 요청마다 (1분 주기) | 신호 생성 전면 중단 |
+| VirtualTrade Service | Market Service | 1분 주기 스케줄러 | 가상거래 트리거 중단 |
+| Trade Service | Market Service | 1분 주기 스케줄러 | 실거래 트리거 중단 |
+| Simulation Service | Market Service | 백테스팅 요청마다 | 백테스팅 중단 |
+| Simulation Service | Agent Service | 백테스팅 요청마다 | 백테스팅 중단 |
+
+### Resilience4j CircuitBreaker 적용
+
+```kotlin
+// 공통 설정 (application.yml)
+resilience4j:
+  circuitbreaker:
+    instances:
+      market-grpc:
+        slidingWindowSize: 10              # 최근 10회 호출 기준
+        failureRateThreshold: 50           # 50% 이상 실패 시 OPEN
+        waitDurationInOpenState: 30s       # 30초 후 HALF_OPEN 시도
+        permittedNumberOfCallsInHalfOpenState: 3
+        recordExceptions:
+          - io.grpc.StatusRuntimeException
+          - java.util.concurrent.TimeoutException
+      agent-grpc:
+        slidingWindowSize: 5
+        failureRateThreshold: 60
+        waitDurationInOpenState: 60s
+
+  timelimiter:
+    instances:
+      market-grpc:
+        timeoutDuration: 5s               # gRPC 단건 호출 타임아웃
+      agent-grpc:
+        timeoutDuration: 300s             # 백테스팅은 최대 5분
+```
+
+### 어댑터 적용 패턴
+
+```kotlin
+@Component
+class MarketCandleGrpcAdapter(
+    private val stub: MarketCandleGrpc.MarketCandleBlockingStub,
+    private val circuitBreakerRegistry: CircuitBreakerRegistry,
+) : FindMarketCandleOutput, FindCurrentPriceOutput {
+
+    private val cb = circuitBreakerRegistry.circuitBreaker("market-grpc")
+
+    override fun getRecentCandles(
+        symbolId: UUID,
+        interval: CandleInterval,
+        limit: Int,
+    ): List<CandleData> =
+        cb.executeSupplier {
+            val request = GetRecentCandlesRequest.newBuilder()
+                .setSymbolId(symbolId.toString())
+                .setInterval(interval.name)
+                .setLimit(limit)
+                .build()
+            stub.withDeadlineAfter(5, TimeUnit.SECONDS)
+                .getRecentCandles(request)
+                .candlesList
+                .map { it.toDomain() }
+        }
+}
+```
+
+### Circuit Breaker 상태별 Fallback
+
+| 상태 | 동작 | Fallback |
+|------|------|---------|
+| `CLOSED` | 정상 | gRPC 호출 |
+| `OPEN` | 차단 | `CallNotPermittedException` → 스케줄러 해당 항목 skip + 경고 로그 |
+| `HALF_OPEN` | 제한적 허용 | 3회 테스트 호출 후 CLOSED 또는 OPEN 전환 |
+
+```kotlin
+// 스케줄러에서 Circuit Breaker OPEN 시 skip 처리
+fun triggerForRegistration(registration: VirtualTradeRegistration) {
+    registration.symbolIds.forEach { symbolId ->
+        runCatching {
+            val price = findCurrentPriceOutput.getCurrentPrice(symbolId, CandleInterval.MINUTE_1)
+            publishAnalyzeCommandOutput.publish(...)
+        }.onFailure { ex ->
+            when (ex) {
+                is CallNotPermittedException ->
+                    logger.warn("Market gRPC circuit OPEN, skipping agentId=${registration.agentId}, symbolId=$symbolId")
+                else ->
+                    logger.error("Unexpected error for agentId=${registration.agentId}", ex)
+            }
+        }
+    }
+}
+```
+
+### 모니터링
+
+Circuit Breaker 상태 변화는 Micrometer를 통해 Prometheus에 자동으로 수집된다.
+Grafana 대시보드에서 OPEN 상태 지속 시 Slack 알림을 설정한다.
+
+```
+resilience4j_circuitbreaker_state{name="market-grpc"}
+  0 = CLOSED, 1 = OPEN, 2 = HALF_OPEN
+```

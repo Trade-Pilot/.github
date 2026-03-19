@@ -76,7 +76,7 @@ Redisson의 `WatchDog` 기능이 자동 갱신을 지원하긴 하지만, 이는
 
 | 실제 케이스 | 분기 결과 |
 |------------|----------|
-| 수집 작업 상태 전이, 포지션 조작, 회원 탈퇴 | 트랜잭션 내 완결 → DB Pessimistic Lock |
+| 수집 작업 상태 전이, 포트폴리오 점유, 회원 탈퇴 | 트랜잭션 내 완결 → DB Pessimistic Lock |
 | Outbox Relay (100ms), 수집 스케줄러 | 트랜잭션 외부, 수백ms 내 완결 → Redis Lock |
 
 ---
@@ -106,7 +106,7 @@ fun startCollect(taskId: CollectTaskId) {
 
 **적용 대상:**
 - `MarketCandleCollectTask.start()` / `collectComplete()` — 수집 작업 상태 전이
-- `VirtualAccount.openPosition()` — 가상 계좌 포지션 조작
+- `Portfolio.reserveCash()` / `releaseReservation()` — 신호 발생 시 현금/포지션 점유
 - `User.withdraw()` — 회원 탈퇴 상태 전이
 
 **주의사항:**
@@ -219,7 +219,7 @@ class RefreshToken(
 |---------|-----------|------|
 | 수집 작업 상태 전이 | Pessimistic Write | `@Lock(PESSIMISTIC_WRITE)` |
 | 회원 탈퇴 | Pessimistic Write | `SELECT FOR UPDATE` |
-| 가상 계좌 포지션 조작 | Pessimistic Write | `@Lock(PESSIMISTIC_WRITE)` |
+| 포트폴리오 현금/포지션 점유 | Pessimistic Write | `@Lock(PESSIMISTIC_WRITE)` |
 | Outbox Relay 중복 방지 | Redis Distributed Lock | Redisson `tryLock` |
 | 심볼별 수집 스케줄러 | Redis Distributed Lock | Redisson `tryLock` |
 | Refresh Token 갱신 | 낙관적 (isRevoked 체크) | SELECT → 비즈니스 로직 검증 |

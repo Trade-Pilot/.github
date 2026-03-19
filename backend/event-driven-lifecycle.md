@@ -33,9 +33,9 @@ User Service ──▶ USER_WITHDRAWN_EVENT_TOPIC ──▶ Notification Service
 | 서비스 | 처리 내용 | 방식 |
 |--------|-----------|------|
 | **Notification Service** | `NotificationChannel` 소프트 딜리트, `NotificationPreference` 소프트 딜리트 | Soft Delete |
-| **Agent Service** | 전략(Strategy), 포트폴리오(Portfolio) 비활성화 | 상태 변경 |
-| **VirtualTrade Service** | 가상 계좌 오픈 포지션 청산 후 계좌 비활성화 | 포지션 청산 + 상태 변경 |
-| **Trade Service** | 실계좌 거래소 API Key 연동 해제, 실거래 비활성화 | 연동 해제 |
+| **Agent Service** | Agent TERMINATED 처리 (Strategy/Portfolio/Signal/Position 감사 목적 보존) | 상태 변경 |
+| **VirtualTrade Service** | VirtualTradeRegistration STOPPED 처리 | 상태 변경 |
+| **Trade Service** | TradeRegistration STOPPED 처리, 미체결 주문 취소 요청 | 상태 변경 |
 
 ### 설계 원칙
 
@@ -70,13 +70,13 @@ sequenceDiagram
         NS->>NS: Channel + Preference 소프트 딜리트
     and
         Kafka-->>AS: Consume (agent-user-consumer)
-        AS->>AS: 전략/포트폴리오 비활성화
+        AS->>AS: Agent TERMINATED 처리
     and
         Kafka-->>VT: Consume (virtual-trade-user-consumer)
-        VT->>VT: 오픈 포지션 청산 + 계좌 비활성화
+        VT->>VT: VirtualTradeRegistration STOPPED 처리
     and
         Kafka-->>TS: Consume (trade-user-consumer)
-        TS->>TS: 실계좌 연동 해제
+        TS->>TS: TradeRegistration STOPPED + 미체결 주문 취소 요청
     end
 ```
 

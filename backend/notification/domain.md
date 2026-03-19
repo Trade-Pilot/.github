@@ -606,6 +606,21 @@ CREATE INDEX notification_template_event_idx ON notification_template (event_typ
     WHERE is_active = TRUE;
 ```
 
+### processed_events 테이블
+
+```sql
+CREATE TABLE processed_events (
+    topic       VARCHAR(255) NOT NULL,
+    partition   INT          NOT NULL,
+    offset      BIGINT       NOT NULL,
+    consumed_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (topic, partition, offset)
+);
+```
+
+> `processed_events` 테이블은 Kafka Consumer의 멱등성 보장을 위해 사용된다.
+> 동일 이벤트의 중복 소비를 방지하기 위해 처리된 (topic, partition, offset) 조합을 기록한다.
+
 ---
 
 ## 13. 예외
