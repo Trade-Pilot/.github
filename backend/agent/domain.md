@@ -38,7 +38,7 @@ Market Service의 bounded context는 원시 데이터 수집·저장이다.
 ```
 domain/
   model/         Strategy, Agent, Portfolio, Position, Signal
-                 BacktestResult, PortfolioHistory
+                 BacktestResult, PortfolioHistory, StrategyDecisionLog
                  SignalConditionResult, SignalResult, RiskConfig ...
   port/
     in/          AnalyzeAgentUseCase, BacktestStrategyUseCase,
@@ -50,6 +50,7 @@ domain/
                  FindPortfolioOutput, SavePortfolioOutput
                  FindPortfolioHistoryOutput, SavePortfolioHistoryOutput
                  SaveSignalOutput, FindSignalOutput
+                 SaveStrategyDecisionLogOutput
                  FindMarketCandleOutput, StrategyExecutorFactory
                  SaveBacktestResultOutput, FindBacktestResultOutput
                  PublishAgentTerminatedOutput
@@ -74,6 +75,7 @@ infrastructure/
                  PortfolioJpaAdapter     (implements FindPortfolioOutput, SavePortfolioOutput,
                                           FindPortfolioHistoryOutput, SavePortfolioHistoryOutput)
                  SignalJpaAdapter        (implements SaveSignalOutput, FindSignalOutput)
+                 StrategyDecisionLogJpaAdapter (implements SaveStrategyDecisionLogOutput)
                  BacktestResultJpaAdapter (implements SaveBacktestResultOutput, FindBacktestResultOutput)
   indicator/     TechnicalIndicators     (MA, EMA, RSI, MACD, Bollinger, Stochastic)
   strategy/      MovingAverageCrossoverExecutor, RsiExecutor, BollingerBreakoutExecutor
@@ -160,7 +162,21 @@ BacktestResult (Entity — Agent 소속)
 ├── unrealizedPnl    : BigDecimal      -- 마지막 시점 보유 포지션 미실현 손익
 ├── totalSignals     : Int             -- BUY/SELL 신호만 카운트 (HOLD 제외)
 ├── signalSnapshots  : JSONB           -- 각 신호 시점의 포트폴리오 상태
-└── createdAt        : OffsetDateTime
+└── createdAt         : OffsetDateTime
+
+──────────────────────────────────────────
+
+StrategyDecisionLog (Entity — 감사 분석용)
+├── logId             : UUID
+├── agentId           : UUID
+├── strategyId        : UUID
+├── symbolId          : UUID
+├── signalType        : SignalType        -- BUY | SELL | HOLD
+├── currentPrice      : BigDecimal
+├── evaluationStatus  : EvaluationStatus  -- SUCCESS | ERROR
+├── indicatorValues   : JSONB             -- 평가 시점의 지표 수치 (예: {rsi: 28.4, ma20: 54000})
+├── evaluationReason  : String?           -- 평가 실패 시 에러 메시지
+└── createdAt         : OffsetDateTime
 
 ──────────────────────────────────────────
 
@@ -183,6 +199,7 @@ PortfolioHistory (Entity — Portfolio 소속)
 enum class StrategyType   { MANUAL, AI }
 enum class MarketType     { COIN }
 enum class SignalType     { BUY, SELL, HOLD }
+enum class EvaluationStatus { SUCCESS, ERROR }
 
 enum class SnapshotType {
     SIGNAL,  // BUY/SELL 신호 실행 직후 자동 기록
@@ -321,6 +338,11 @@ interface FindBacktestResultOutput {
     fun findById(backtestId: UUID): BacktestResult?
     fun findAllByAgentId(agentId: UUID): List<BacktestResult>
 }
+
+// 감사 로그 저장용 Output Port
+interface SaveStrategyDecisionLogOutput {
+    fun save(log: StrategyDecisionLog)
+}
 ```
 
 ---
@@ -369,31 +391,58 @@ Strategy가 반환한 `SignalConditionResult`에 Agent의 `RiskConfig`를 적용
 ### PortfolioUpdater
 
 VirtualTrade / Trade Service로부터 수신한 **`ExecutionConfirmedEvent`(체결 확정 이벤트)** 를 Portfolio에 반영하고, `PortfolioHistory`(SIGNAL 타입)를 기록한다.
-신호 생성 시점에 이미 점유(Reserve)된 현금/포지션을 **체결 완료 시점에 실제 차감·반영**한다.
+또한, 주문 실패/취소 시 **점유된 자산을 해제(Rollback)**하는 보상 트랜잭션을 처리한다.
 
+#### 1) 체결 반영 (Normal Flow)
 - **`BUY` 체결:**
   1. `reservedCash -= suggestedQuantity × signalPrice` (점유 해제)
   2. `cash -= price × quantity + fee` (실제 현금 차감)
-  3. 포지션이 없으면 신규 생성, 이미 있으면 수량을 더하고 평균 단가 재계산(`(기존수량×기존단가 + 추가수량×체결가) / 전체수량`).
-  4. 스냅샷 기록.
+  3. 포지션이 없으면 신규 생성, 이미 있으면 수량을 더하고 평균 단가 재계산.
 - **`SELL` 체결:**
   1. `position.reservedQuantity -= quantity` (점유 해제)
   2. `position.quantity -= quantity` (실제 수량 차감), `cash += price × quantity - fee`, `realizedPnl` 갱신.
-  3. Position.quantity가 0이 되면 포지션 삭제. 스냅샷 기록.
-  > VirtualTrade는 전량 체결이므로 항상 포지션이 삭제된다.
-  > Trade는 부분 체결이 가능하므로 잔여 수량이 남을 수 있다. 잔여 수량은 averagePrice를 그대로 유지한다.
 
-**점유 해제 기준값 (reservedCash 차감 시 신호가격 vs 체결가격):**
-`reservedCash`는 신호 시점의 `suggestedQuantity × signalPrice`로 점유했으므로, 해제 시에도 동일 값을 기준으로 차감한다. `ExecutionConfirmedEvent`에 `signalId`가 포함되므로 Signal 레코드에서 조회 가능하다. 단, 간략화를 위해 체결 수량 × 신호가를 해제 기준으로 사용해도 무방하다. 중요한 것은 `reservedCash ≥ 0`을 항상 유지하는 것이다.
+#### 2) 점유 해제 (Compensation/Rollback Flow)
+주문이 거래소에서 거절(`REJECTED`)되거나 사용자에 의해 취소(`CANCELLED`)된 경우, `ExecutionConfirmedEvent`와 유사한 규격의 **`OrderFailedEvent`**를 수신하여 점유를 해제한다.
 
-**부분 체결(PARTIALLY_FILLED) 시 PortfolioHistory**: 체결 건마다 `PortfolioHistory(SIGNAL, triggerSignalId)` 스냅샷이 독립적으로 기록된다. 동일 `signalId`에 대해 여러 스냅샷이 존재할 수 있으며, 이는 의도된 동작이다 (체결 진행 상황을 시계열로 추적).
+- **`BUY` 실패:** `reservedCash -= suggestedQuantity × signalPrice`
+- **`SELL` 실패:** `position.reservedQuantity -= suggestedQuantity`
+- **주의**: 실제 자산(`cash`, `quantity`)은 건드리지 않고 점유(`reserved`) 필드만 차감한다.
 
-**SIGNAL 스냅샷의 `positionsSnapshot`**: 체결 반영 후 보유 포지션 전체를 JSON 배열로 직렬화해 저장한다. 체결 대상 심볼은 `체결가`를 사용하고, 나머지 심볼은 직전 `averagePrice`로 평가한다(근사치).
+---
 
-**`totalValue` 계산**: `cash + Σ(각 포지션의 평가액)`.
-**`unrealizedPnl` 계산**: `Σ((평가가격 - averagePrice) × quantity)`.
+## 5-1. Portfolio Reconciliation (데이터 대조)
 
-### PortfolioHistoryRecorder (Daily 스케줄러)
+### 개요
+`Agent Service`의 포트폴리오 데이터와 `Exchange Service`의 실제 잔고를 비교하여 데이터 정합성을 검증한다.
+
+### 대조 프로세스
+1. **스케줄러**: 매일 자정 모든 `ACTIVE` 에이전트에 대해 실행.
+2. **잔고 조회**: `Exchange Service`에 해당 계좌의 현재 잔고(`actualCash`, `actualPositions`) 요청.
+3. **불일치 판단**:
+   - `|cash - actualCash| > Threshold` (오차 범위 밖)
+   - `|position.quantity - actualQuantity| > Threshold`
+4. **후속 조치**:
+   - 불일치 발생 시 `PortfolioHistory(DAILY)`에 오차 금액 기록.
+   - 관리자 알림(Discord/Slack) 발송.
+   - (옵션) 차이가 미세할 경우 `actual` 데이터로 자동 보정.
+
+---
+
+## 5-2. Strategy Decision Logging (감사 로그)
+
+신호 생성 요청(`AnalyzeAgentCommand`)이 처리될 때마다, 신호 결과(HOLD 포함)와 상관없이 **평가 시점의 모든 상태**를 기록한다.
+
+- **목적**: "왜 이 시점에 매수 신호가 발생하지 않았는가?" 또는 "왜 잘못된 신호가 나갔는가?"를 사후 분석하기 위함.
+- **기록 대상**:
+  - `indicatorValues`: 전략 평가에 사용된 모든 기술적 지표의 당시 수치.
+  - `signalType`: 최종 결정된 신호 (HOLD도 포함하여 기록).
+  - `currentPrice`: 평가 당시의 가격.
+- **저장소**: 메인 DB의 `strategy_decision_log` 테이블에 저장하며, 분석 성능을 위해 일정 기간(예: 3개월) 경과 후 빅데이터 저장소(BigQuery 등)로 오프로드하거나 삭제한다.
+
+---
+
+## 5-3. PortfolioHistoryRecorder (Daily 스케줄러)
 
 매일 자정 ACTIVE 상태의 모든 Agent에 대해 `DAILY` 타입 스냅샷을 기록한다.
 
@@ -446,15 +495,16 @@ data class AnalyzeAgentReply(
 4.  StrategyExecutorFactory.create(strategy) → executor
 5.  FindMarketCandleOutput.getRecentCandles(symbolId, strategy.parameters.interval, executor.requiredCandleCount())
 6.  executor.analyze(candles) → SignalConditionResult
-7.  Portfolio 조회 + @Lock(PESSIMISTIC_WRITE) (가용 현금/포지션 정확히 읽기 위해 락 필요)
-8.  AgentRiskManager.applySizing(symbolId, condition, portfolio, riskConfig, currentPrice) → SignalResult
+7.  StrategyDecisionLog 생성 및 비동기 저장 (도메인 이벤트 발행 또는 직접 호출)
+8.  Portfolio 조회 + @Lock(PESSIMISTIC_WRITE) (가용 현금/포지션 정확히 읽기 위해 락 필요)
+9.  AgentRiskManager.applySizing(symbolId, condition, portfolio, riskConfig, currentPrice) → SignalResult
     └ BUY: portfolio.reservedCash += suggestedQuantity × currentPrice (즉시 점유)
     └ SELL: position.reservedQuantity += suggestedQuantity (즉시 점유)
-9.  BUY/SELL 신호만 Signal DB 저장 (HOLD는 저장 안 함)
-10. Portfolio/Position 점유 상태 DB 저장 (8번의 reservation 반영)
-11. AnalyzeAgentReply 발행 (HOLD 포함 모든 신호 유형 발행)
+10. BUY/SELL 신호만 Signal DB 저장 (HOLD는 저장 안 함)
+11. Portfolio/Position 점유 상태 DB 저장 (9번의 reservation 반영)
+12. AnalyzeAgentReply 발행 (HOLD 포함 모든 신호 유형 발행)
 
-> 신호 생성과 점유(8~10번)는 동일 트랜잭션으로 처리한다.
+> 신호 생성과 점유(9~11번)는 동일 트랜잭션에서 처리한다.
 > 실제 포트폴리오 반영(cash 차감·증가, position 갱신)은
 > VirtualTrade / Trade Service의 체결 완료 후 ExecutionConfirmedEvent를 수신할 때
 > PortfolioUpdater가 처리한다. (Section 6 아래 참조)
@@ -703,6 +753,22 @@ CREATE TABLE backtest_result (
 
 CREATE INDEX idx_backtest_result_agent ON backtest_result (agent_id, created_at DESC);
 
+CREATE TABLE strategy_decision_log (
+    id               UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id         UUID          NOT NULL REFERENCES agent(id),
+    strategy_id      UUID          NOT NULL REFERENCES strategy(id),
+    symbol_id        UUID          NOT NULL,
+    signal_type      VARCHAR(10)   NOT NULL,
+    current_price    NUMERIC(30,8) NOT NULL,
+    indicator_values JSONB         NOT NULL DEFAULT '{}',
+    evaluation_status VARCHAR(20)  NOT NULL,
+    evaluation_reason TEXT,
+    created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+-- 최신 로그 조회 및 특정 기간 데이터 삭제 최적화
+CREATE INDEX idx_decision_log_agent_time ON strategy_decision_log (agent_id, created_at DESC);
+
 CREATE TABLE outbox (
     id             UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
     aggregate_type VARCHAR NOT NULL,
@@ -763,6 +829,7 @@ CREATE TABLE processed_events (
 | `GET` | `/agents/{id}/portfolio` | USER | 포트폴리오 현황 (현금, 총자산, 실현손익) |
 | `GET` | `/agents/{id}/portfolio/positions` | USER | 현재 보유 포지션 목록 |
 | `GET` | `/agents/{id}/portfolio/history` | USER | 시간별 포트폴리오 이력 (`?from=&to=&type=SIGNAL\|DAILY`) |
+| `GET` | `/agents/{id}/decision-logs` | USER | 전략 결정 감사 로그 (페이지네이션) |
 | `GET` | `/agents/{id}/backtests` | USER | 백테스트 결과 목록 |
 | `GET` | `/agents/{id}/backtests/{backtestId}` | USER | 백테스트 결과 상세 (신호 스냅샷 포함) |
 

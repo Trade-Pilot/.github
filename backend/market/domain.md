@@ -570,13 +570,16 @@ interface UpdateMarketCandleCollectTaskUseCase {
 }
 ```
 
-### 10.4 캔들 생성
+### 10.5 수집 샤딩 및 스케줄링 (Worker Sharding)
 
-```kotlin
-interface CreateMarketCandleUseCase {
-    fun createMonthlyPartition(year: Int, month: Int)
-}
-```
+수많은 심볼의 캔들을 효율적으로 수집하기 위해 **Consistency Hashing** 기반의 샤딩을 적용한다.
+
+- **샤딩 알고리즘**: `hash(symbolId) % totalWorkerCount`
+- **동적 노드 관리**: Kubernetes Pod 리스트를 감시하여 `totalWorkerCount` 변화 시 샤딩을 재계산한다 (Rebalancing).
+- **작업 할당**:
+  - 각 워커(Pod)는 자신의 `workerIndex`를 알고 있다.
+  - 스케줄러 실행 시 `hash(task.symbolIdentifier) % totalWorkerCount == myWorkerIndex`인 태스크만 추출하여 실행한다.
+  - 이 방식은 별도의 마스터 노드 없이도 각 워커가 독립적으로 자신의 할 일을 결정할 수 있게 한다.
 
 ---
 

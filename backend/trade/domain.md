@@ -480,10 +480,19 @@ enum class ExchangeOrderStatus {
 
    CANCELLED:
      Order.status = CANCELLED
-     (이미 일부 체결된 Execution은 유지 — 체결분 이벤트는 이미 발행됨)
+     // 보상 트랜잭션: 미체결 잔여 수량에 대한 점유 해제 이벤트 발행
+     PublishExecutionConfirmedOutput.publishOrderFailed(order)
+       └ agentId, signalId, symbolId, side
+       └ remainingQuantity = requestedQuantity - executedQuantity
+       └ 발행 토픽: event.trade.execution-failed
 
    REJECTED:
      Order.status = REJECTED
+     // 보상 트랜잭션: 요청 전체 수량에 대한 점유 해제 이벤트 발행
+     PublishExecutionConfirmedOutput.publishOrderFailed(order)
+       └ agentId, signalId, symbolId, side
+       └ remainingQuantity = requestedQuantity
+       └ 발행 토픽: event.trade.execution-failed
      로그 기록 (reason)
 ```
 
