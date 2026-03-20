@@ -106,8 +106,596 @@
 - **L1 (Local Cache)**: 자주 조회되는 설정 정보 등은 Caffeine 사용 (TTL 1~5분).
 - **L2 (Global Cache)**: Redis를 사용하여 캔들 데이터, 에이전트 상태 등 공유 캐싱.
 
+### 3.3 WebSocket 통합 진입점 (Multiplexing)
+프론트엔드의 커넥션 효율을 위해 개별 서비스가 아닌 **API Gateway를 단일 WebSocket 엔드포인트**로 사용한다.
+*   **경로**: `wss://api.trade-pilot.com/ws`
+*   **방식**: 사용자가 구독하고 싶은 주제(Topic)를 메시지로 전송하면, Gateway가 내부 서비스를 대리 구독하여 메시지를 통합 전달한다.
+
 ---
 
-## 4. 서비스 간 통신 원칙 (기존 내용 유지)
+## 4. 데이터 인터페이스 표준
 
-... (이하 기존 내용 유지)
+### 4.1 공통 에러 응답 (ApiErrorResponse)
+모든 REST API 실패 시 아래 객체를 JSON으로 반환한다.
+```kotlin
+data class ApiErrorResponse(
+    val code:      String,              // 도메인 코드 (A010 등)
+    val message:   String,              // 사용자 노출용 기본 메시지
+    val timestamp: OffsetDateTime,
+    val path:      String,
+    val details:   Map<String, String>? // 필드별 에러 (Optional)
+)
+```
+
+---
+
+## 5. 서비스 간 통신 원칙
+
+### 5.1 동기 통신 (gRPC)
+
+**사용 시나리오**:
+- 데이터 조회 (캔들, 심볼 메타데이터)
+- 백테스팅 등 스트리밍 응답이 필요한 경우
+- 응답이 즉시 필요한 요청-응답 패턴
+
+**원칙**:
+- **타임아웃 설정 필수**: 모든 gRPC 호출은 명시적 타임아웃 설정
+- **에러 전파**: gRPC 상태 코드를 도메인 에러로 변환
+- **재시도 제한**: 멱등한 조회는 최대 3회, 비멱등 작업은 재시도 금지
+
+**타임아웃 기준**:
+```
+조회 (GetRecentCandles):        5초
+대용량 조회 (GetHistoricalCandles): 30초
+스트리밍 (BacktestStrategy):    30분
+```
+
+### 5.2 비동기 통신 (Kafka)
+
+**사용 시나리오**:
+- 도메인 이벤트 발행 (상태 변경 알림)
+- 커맨드 전달 (신호 생성 요청, 주문 실행)
+- 서비스 간 결합도를 낮춰야 하는 경우
+
+**원칙**:
+- **At-Least-Once 보장**: Consumer는 멱등성 처리 필수 (`processed_events` 테이블)
+- **Outbox 패턴**: DB 트랜잭션과 Kafka 발행의 원자성이 필요한 경우 사용
+- **Saga 패턴**: 분산 트랜잭션은 Saga로 구현 (보상 트랜잭션 정의)
+
+### 5.3 REST API
+
+**사용 시나리오**:
+- 프론트엔드 ↔ 백엔드 통신
+- 외부 시스템 연동
+
+**원칙**:
+- **API Gateway 경유**: 모든 외부 요청은 API Gateway를 통해 라우팅
+- **JWT 검증**: Gateway에서 JWT 검증 후 `X-User-Id` 헤더 주입
+- **공통 에러 응답**: `ApiErrorResponse` 포맷 통일
+
+---
+
+## 6. Kafka 토픽 명명 규칙 및 메시지 표준
+
+### 6.1 토픽 명명 규칙
+
+**패턴**: `{메시지타입}.{목적지서비스}.{발신지서비스}.{액션}`
+
+**메시지 타입**:
+- `command`: 요청-응답 패턴 (Command/Reply)
+- `reply`: Command에 대한 응답
+- `reply-failure`: Command 실패 응답
+- `event`: 단방향 이벤트 (발행 후 잊기)
+
+**예시**:
+```
+command.agent.virtual-trade.analyze-strategy
+reply.agent.virtual-trade.analyze-strategy
+event.virtual-trade.execution
+event.agent.agent-terminated
+
+# 도메인 이벤트 (CDC 스타일)
+trade-pilot.agentservice.agent       (eventType: agent-terminated)
+trade-pilot.userservice.user         (eventType: user-withdrawn)
+```
+
+**전역 토픽**:
+```
+trade-pilot.notification.command     (NOTIFICATION_COMMAND_TOPIC)
+```
+
+### 6.2 메시지 Envelope
+
+모든 Kafka 메시지는 공통 Envelope로 래핑:
+
+```kotlin
+data class KafkaEnvelope<T>(
+    val messageId: UUID,              // 메시지 고유 ID (멱등성 보장)
+    val timestamp: OffsetDateTime,
+    val traceId: String,              // 분산 추적용
+    val callback: String?,            // Reply 토픽 (Command 전용)
+    val payload: T,                   // 실제 메시지
+)
+```
+
+### 6.3 Command/Reply 패턴
+
+```kotlin
+// Command 발행 시 callback 지정
+KafkaEnvelope(
+    messageId = UUID.randomUUID(),
+    timestamp = now,
+    traceId = currentTraceId,
+    callback = "reply.agent.virtual-trade.analyze-strategy",
+    payload = AnalyzeAgentCommand(...)
+)
+
+// Consumer는 callback 토픽으로 Reply 발행
+kafkaTemplate.send(envelope.callback!!, reply)
+```
+
+### 6.4 멱등성 보장
+
+모든 Consumer는 `processed_events` 테이블로 중복 처리 방지:
+
+```sql
+CREATE TABLE processed_events (
+    topic       VARCHAR(255) NOT NULL,
+    partition   INT          NOT NULL,
+    offset      BIGINT       NOT NULL,
+    consumed_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (topic, partition, offset)
+);
+```
+
+```kotlin
+@Transactional
+fun consume(record: ConsumerRecord<String, KafkaEnvelope<T>>) {
+    val key = ProcessedEventKey(record.topic(), record.partition(), record.offset())
+
+    if (processedEventRepository.existsById(key)) {
+        log.debug("Already processed: $key")
+        return
+    }
+
+    // 비즈니스 로직 처리
+    handleMessage(record.value().payload)
+
+    // 처리 완료 기록
+    processedEventRepository.save(ProcessedEvent(key, now()))
+}
+```
+
+---
+
+## 7. 옵저빌리티 (Observability)
+
+### 7.1 Health Check
+
+모든 서비스는 다음 엔드포인트 제공:
+
+```
+GET /actuator/health
+GET /actuator/health/liveness
+GET /actuator/health/readiness
+```
+
+**Custom Health Indicators**:
+- Database 연결
+- Kafka 연결
+- Redis 연결
+- 외부 의존 서비스 (gRPC)
+
+### 7.2 Metrics (Prometheus)
+
+**필수 메트릭**:
+```
+# HTTP 요청
+http_server_requests_seconds_count{uri, method, status}
+http_server_requests_seconds_sum
+
+# Kafka Consumer
+kafka_consumer_records_consumed_total{topic}
+kafka_consumer_lag{topic, partition}
+
+# gRPC
+grpc_server_handled_total{service, method, code}
+grpc_server_handling_seconds
+
+# 비즈니스 메트릭 (서비스별)
+agent_signal_generated_total{signal_type}
+market_candle_collected_total{symbol, interval}
+trade_order_submitted_total{side, type, status}
+```
+
+### 7.3 Distributed Tracing
+
+**구현**: OpenTelemetry + Jaeger/Tempo
+
+**Trace ID 전파**:
+```
+HTTP → X-Trace-Id 헤더
+Kafka → KafkaEnvelope.traceId
+gRPC → grpc-trace-bin 메타데이터
+```
+
+**Span 분류**:
+- HTTP: `http.method`, `http.url`, `http.status_code`
+- Kafka: `messaging.system=kafka`, `messaging.destination=topic`
+- gRPC: `rpc.system=grpc`, `rpc.service`, `rpc.method`
+- DB: `db.system=postgresql`, `db.statement`
+
+### 7.4 Logging
+
+**로그 레벨 기준**:
+```
+ERROR: 시스템 장애, 데이터 손실 가능성
+WARN:  복구 가능한 오류, Rate Limit 초과
+INFO:  비즈니스 이벤트 (주문 체결, 신호 생성)
+DEBUG: 디버깅 정보 (프로덕션에서 비활성화)
+```
+
+**Structured Logging** (JSON):
+```json
+{
+  "timestamp": "2024-01-01T12:00:00Z",
+  "level": "INFO",
+  "traceId": "abc123",
+  "service": "agent-service",
+  "message": "Signal generated",
+  "userId": "uuid",
+  "agentId": "uuid",
+  "signalType": "BUY"
+}
+```
+
+### 7.5 알람 정책
+
+**Severity 분류**:
+
+**P0 (Critical - 즉시 대응)**:
+- 서비스 Health Check 실패 (5분 이상)
+- DB 연결 끊김
+- Kafka Consumer Lag > 10,000
+
+**P1 (High - 30분 내 대응)**:
+- API 에러율 > 5%
+- 주문 제출 실패율 > 10%
+- 캔들 수집 실패 연속 3회 이상
+
+**P2 (Medium - 업무시간 내 대응)**:
+- 디스크 사용률 > 80%
+- Memory 사용률 > 85%
+- Portfolio Reconciliation 불일치
+
+---
+
+## 8. 재시도 및 에러 처리 전략
+
+### 8.1 재시도 정책
+
+**Kafka Consumer**:
+```yaml
+재시도 횟수: 3회
+백오프: 지수 백오프 (1s, 2s, 4s)
+DLQ: 3회 실패 시 Dead Letter Queue로 이동
+```
+
+**gRPC Client**:
+```yaml
+재시도 횟수: 3회 (GET 계열), 0회 (POST/PUT)
+타임아웃: 5초 (조회), 30초 (대용량 조회)
+재시도 가능 코드: UNAVAILABLE, DEADLINE_EXCEEDED
+```
+
+**HTTP 외부 API** (거래소 등):
+```yaml
+재시도 횟수: 2회
+타임아웃: 10초
+재시도 간격: 1초
+```
+
+**스케줄러 작업**:
+```yaml
+Market Candle 수집:
+  자동 재시도: 3회 (retryCount < MAX_RETRY_COUNT)
+  재시도 간격: 다음 스케줄 사이클 (1분)
+  3회 초과 시: PAUSED 상태, 수동 복구 필요
+```
+
+### 8.2 Circuit Breaker
+
+**적용 대상**:
+- Exchange Service → 거래소 API
+- 모든 gRPC 클라이언트
+
+**설정** (Resilience4j):
+```yaml
+failureRateThreshold: 50%        # 실패율 50% 초과 시 Open
+slowCallRateThreshold: 50%       # 느린 호출 50% 초과 시 Open
+slowCallDurationThreshold: 5s    # 5초 이상이면 느린 호출
+waitDurationInOpenState: 60s     # Open 상태 유지 시간
+permittedNumberOfCallsInHalfOpenState: 10
+```
+
+### 8.3 에러 코드 체계
+
+**형식**: `{서비스코드}{일련번호}`
+
+```
+User Service:         U001~U999
+Exchange Service:     EX001~EX999
+Market Service:       MS001~MS999
+Agent Service:        A001~A999
+Simulation Service:   S001~S999
+VirtualTrade Service: VT001~VT999
+Trade Service:        T001~T999
+Notification Service: N001~N999
+```
+
+**HTTP 상태 코드 매핑**:
+```
+도메인 에러 타입     → HTTP 상태
+NOT_FOUND          → 404
+INVALID_STATE      → 409 Conflict
+VALIDATION_ERROR   → 400 Bad Request
+UNAUTHORIZED       → 401
+FORBIDDEN          → 403
+RATE_LIMIT_EXCEEDED → 429
+INTERNAL_ERROR     → 500
+```
+
+---
+
+## 9. 데이터 보관 정책
+
+### 9.1 보관 기간
+
+**Hot Storage (PostgreSQL)**:
+```
+이벤트 로그:        3개월
+  - StrategyDecisionLog
+  - PortfolioHistory (SIGNAL 타입)
+  - NotificationLog
+
+실행 이력:          1년
+  - Order
+  - Execution
+  - Signal
+
+마스터 데이터:      영구
+  - User
+  - Strategy
+  - Agent
+  - Portfolio
+  - MarketSymbol
+```
+
+**Warm Storage (BigQuery / S3 Parquet)**:
+```
+3개월~2년:
+  - 모든 이벤트 로그
+  - 집계 분석용 데이터
+```
+
+**Cold Storage (S3 Glacier)**:
+```
+2년~:
+  - 규제 준수용 감사 데이터
+  - 압축 아카이브
+```
+
+### 9.2 데이터 아카이빙 스케줄
+
+**매월 1일 실행**:
+```sql
+-- 3개월 이전 데이터를 BigQuery로 이동
+INSERT INTO bigquery.strategy_decision_log
+SELECT * FROM strategy_decision_log
+WHERE created_at < NOW() - INTERVAL '3 months';
+
+DELETE FROM strategy_decision_log
+WHERE created_at < NOW() - INTERVAL '3 months';
+```
+
+**매년 1월 1일 실행**:
+```
+- BigQuery → S3 Parquet 변환
+- 2년 이전 데이터 Glacier 이동
+```
+
+### 9.3 데이터 삭제 정책
+
+**Soft Delete** (논리 삭제):
+```
+- User (회원 탈퇴)
+- NotificationChannel
+- NotificationPreference
+- ExchangeAccount
+
+※ 감사 목적으로 데이터는 보존, isDeleted=true 플래그로 비활성화
+```
+
+**Hard Delete** (물리 삭제):
+```
+- RefreshToken (만료 30일 후)
+- Outbox (발행 성공 후 7일)
+- ProcessedEvents (처리 후 30일)
+```
+
+---
+
+## 10. API Gateway 상세
+
+### 10.1 인증 및 인가
+
+**JWT 검증**:
+```yaml
+알고리즘: RS256
+Public Key: User Service에서 제공 (/auth/public-key)
+검증 항목:
+  - 서명 유효성
+  - 만료 시간 (exp)
+  - 발급자 (iss = "trade-pilot")
+```
+
+**헤더 주입**:
+```
+검증 성공 시:
+  X-User-Id: {userId}
+  X-User-Role: {role}
+
+내부 서비스는 이 헤더를 신뢰하고 사용
+```
+
+### 10.2 Rate Limiting
+
+**사용자별 Rate Limit**:
+```yaml
+인증 사용자:
+  - 일반: 1000 req/min
+  - ADMIN: 무제한
+
+미인증:
+  - 100 req/min (IP 기준)
+```
+
+**엔드포인트별 Rate Limit**:
+```yaml
+POST /auth/sign-in:     5 req/min (무차별 대입 방지)
+POST /orders:           100 req/min
+GET /*:                 1000 req/min
+```
+
+### 10.3 라우팅 규칙
+
+```nginx
+/auth/*           → User Service
+/users/*          → User Service
+/exchange-accounts/* → Exchange Service
+/symbols/*        → Market Service
+/candles/*        → Market Service
+/strategies/*     → Agent Service
+/agents/*         → Agent Service
+/backtests/*      → Simulation Service
+/virtual-trades/* → VirtualTrade Service
+/trades/*         → Trade Service
+/notification-*   → Notification Service
+```
+
+### 10.4 CORS 설정
+
+```yaml
+allowed-origins:
+  - https://trade-pilot.com
+  - https://*.trade-pilot.com
+allowed-methods: GET, POST, PUT, DELETE, OPTIONS
+allowed-headers: Authorization, Content-Type
+max-age: 3600
+```
+
+---
+
+## 11. 보안 체크리스트
+
+### 11.1 인증/인가
+- [x] JWT RS256 사용
+- [x] Refresh Token DB 저장 및 무효화 가능
+- [x] API Gateway에서 JWT 검증
+- [x] 서비스 간 mTLS 적용
+- [x] Kafka SASL/SCRAM 인증
+
+### 11.2 암호화
+- [x] 민감 정보 AES-256-GCM 암호화 (Exchange API Key)
+- [x] HTTPS 강제 (HTTP → HTTPS 리다이렉트)
+- [x] DB 연결 암호화 (SSL/TLS)
+- [ ] 암호화 키 로테이션 정책 (TODO)
+
+### 11.3 입력 검증
+- [x] DTO Validation (@Valid, JSR-303)
+- [x] SQL Injection 방지 (JPA Prepared Statement)
+- [x] XSS 방지 (Response Encoding)
+- [x] CSRF 방지 (SameSite Cookie, CORS)
+
+### 11.4 권한 검증
+- [x] 사용자별 리소스 소유권 검증 (userId 일치 확인)
+- [x] ADMIN 전용 API 분리
+- [x] Kafka ACL (토픽별 접근 제어)
+
+---
+
+## 12. 배포 및 운영
+
+### 12.1 컨테이너화
+
+**Dockerfile 표준**:
+```dockerfile
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY build/libs/*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+**리소스 제한**:
+```yaml
+resources:
+  requests:
+    memory: 512Mi
+    cpu: 500m
+  limits:
+    memory: 1Gi
+    cpu: 1000m
+```
+
+### 12.2 환경별 설정
+
+```
+dev:  개발 환경 (로컬 Docker Compose)
+stg:  스테이징 (프로덕션 데이터 복제본)
+prod: 프로덕션
+```
+
+**환경 변수 관리**:
+```yaml
+DB 연결: Kubernetes Secret
+Kafka: ConfigMap
+암호화 키: Vault / AWS Secrets Manager
+```
+
+### 12.3 롤링 업데이트
+
+```yaml
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1        # 동시에 추가 가능한 Pod 수
+    maxUnavailable: 0  # 업데이트 중 중단 가능한 Pod 수
+```
+
+**배포 절차**:
+1. Health Check 통과 확인
+2. 카나리 배포 (10% 트래픽)
+3. 메트릭 모니터링 (에러율, 레이턴시)
+4. 점진적 확대 (50% → 100%)
+5. 롤백 준비 (이전 이미지 보관)
+
+---
+
+## 부록: 서비스 의존성 매트릭스
+
+| 서비스 | User | Exchange | Market | Agent | Simulation | VirtualTrade | Trade | Notification |
+|--------|------|----------|--------|-------|------------|--------------|-------|--------------|
+| User | - | - | - | - | - | - | - | ✅ Event |
+| Exchange | - | - | - | - | - | - | ✅ Command | - |
+| Market | - | ✅ Command | - | - | - | - | - | ✅ Event |
+| Agent | - | - | ✅ gRPC | - | - | ✅ Command | ✅ Command | - |
+| Simulation | - | - | ✅ gRPC | ✅ gRPC | - | - | - | - |
+| VirtualTrade | - | - | ✅ gRPC | ✅ Command | - | - | - | ✅ Command |
+| Trade | - | ✅ Command | ✅ gRPC | ✅ Command | - | - | - | ✅ Command |
+| Notification | - | - | - | - | - | - | - | - |
+
+**범례**:
+- ✅ Command: Kafka Command/Reply
+- ✅ Event: Kafka Event (단방향)
+- ✅ gRPC: 동기 호출

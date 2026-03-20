@@ -298,8 +298,32 @@ data class CancelOrderCommand(
 
 ### TradeScheduler (신호 요청 트리거)
 
+**설정 가능한 실행 주기 (기본: 1분)**:
+
+```yaml
+# application.yml
+scheduler:
+  trade:
+    interval: 60000  # 밀리초
 ```
-[매 1분 실행]
+
+```kotlin
+@Component
+class TradeScheduler(
+    @Value("\${scheduler.trade.interval:60000}")
+    private val schedulerInterval: Long,
+    // ...
+) {
+    @Scheduled(fixedDelayString = "\${scheduler.trade.interval:60000}")
+    fun triggerAnalysis() {
+        // ...
+    }
+}
+```
+
+**실행 흐름**:
+```
+[설정된 주기마다 실행]
 1. FindRegistrationOutput.findAllByStatus(ACTIVE)
 2. 각 registration에 대해:
    각 symbolId에 대해:
@@ -312,8 +336,32 @@ data class CancelOrderCommand(
 
 ### OrderTimeoutScheduler (LIMIT 주문 타임아웃 처리)
 
+**설정 가능한 실행 주기 (기본: 1분)**:
+
+```yaml
+# application.yml
+scheduler:
+  trade:
+    timeout-check-interval: 60000  # 밀리초
 ```
-[매 1분 실행]
+
+```kotlin
+@Component
+class OrderTimeoutScheduler(
+    @Value("\${scheduler.trade.timeout-check-interval:60000}")
+    private val checkInterval: Long,
+    // ...
+) {
+    @Scheduled(fixedDelayString = "\${scheduler.trade.timeout-check-interval:60000}")
+    fun cancelTimedOutOrders() {
+        // ...
+    }
+}
+```
+
+**실행 흐름**:
+```
+[설정된 주기마다 실행]
 1. FindOrderOutput.findTimedOutPendingOrders(now)
    └ status IN (SUBMITTED, PARTIALLY_FILLED) AND timeoutAt < now
 2. 각 order에 대해:
@@ -323,6 +371,113 @@ data class CancelOrderCommand(
 
 > LIMIT 주문이 `SUBMITTED`된 이후 `timeoutAt` 이전까지는 Trade Service가 직접 취소하지 않는다.
 > 타임아웃 초과 시에만 취소 요청을 보내고, 실제 `CANCELLED` 상태 전환은 Exchange Service의 이벤트를 기다린다.
+
+---
+
+## 5-1. Global Account Reconciliation (계좌 대조)
+
+### 개요
+
+하나의 거래소 계정을 여러 Agent가 공유하므로, **계좌 전체 차원의 자산 정합성**을 검증한다.
+Agent Service의 Portfolio Reconciliation이 에이전트별 가상 장부를 실계좌와 비교한다면,
+Trade Service의 Global Account Reconciliation은 **모든 에이전트의 할당 자산 합계**가 실계좌를 초과하지 않는지 검증한다.
+
+### 검증 대상
+
+1. **계좌별 총 할당 자본 검증**:
+   ```
+   Σ(TradeRegistration.allocatedCapital | exchangeAccountId = X)
+     ≤ Exchange Service 실계좌 총 잔고
+   ```
+
+2. **미할당 잔고 계산**:
+   ```
+   UnallocatedBalance = 실계좌 총 잔고 - Σ(allocatedCapital)
+   ```
+
+### 대조 프로세스
+
+**스케줄러**: 매일 자정(KST 00:00) 모든 거래소 계정에 대해 실행
+
+```kotlin
+@Component
+class AccountReconciliationScheduler(
+    @Value("\${scheduler.trade.reconciliation-interval:86400000}")  // 기본: 24시간
+    private val reconciliationInterval: Long,
+    // ...
+) {
+    @Scheduled(fixedDelayString = "\${scheduler.trade.reconciliation-interval:86400000}")
+    fun reconcileAccounts() {
+        // ...
+    }
+}
+```
+
+**실행 흐름**:
+```
+1. 모든 고유한 exchangeAccountId 추출 (ACTIVE Registration 기준)
+2. 각 계정에 대해:
+   a. Exchange Service에 실계좌 잔고 조회 (gRPC 또는 Kafka)
+      └ ActualBalance { cash, positions }
+   b. Trade Service에서 해당 계정의 총 할당 자본 합산
+      └ SELECT SUM(allocated_capital) FROM trade_registration
+          WHERE exchange_account_id = ? AND status = 'ACTIVE'
+   c. 불일치 판단:
+      - 현금 부족: actualCash < Σ(allocatedCapital) - Threshold
+      - Threshold = max(10000원, Σ(allocatedCapital) × 0.01) (1%)
+   d. 불일치 발생 시 후속 조치:
+      - 관리자 알림 발송 (ACCOUNT_RECONCILIATION_FAILED)
+      - 로그 기록 (reconciliation_log 테이블)
+      - 선택: 부족분이 임계치(5%) 이상이면 해당 계정의 모든 Registration → PAUSED
+3. 정상이면 다음 계정으로
+```
+
+### 불일치 원인
+
+- 사용자가 거래소에서 직접 출금
+- Exchange Service 미집계 수수료
+- 체결 이벤트 누락 (Kafka Consumer 장애)
+- 포트폴리오 갱신 로직 버그
+
+### 복구 방법
+
+1. **관리자 개입**:
+   - 원인 파악 (출금 이력, 체결 이벤트 로그 확인)
+   - 필요 시 `allocatedCapital` 수동 조정 (API 제공)
+   - Registration 재활성화
+
+2. **자동 보정** (선택적):
+   - 차이가 미미(1% 미만)하고 실계좌 잔고가 더 클 경우
+   - 미할당 잔고를 각 Registration에 비례 배분하여 조정
+
+### DB 스키마 추가 (선택)
+
+계좌 대조 이력을 저장하려면:
+
+```sql
+CREATE TABLE account_reconciliation_log (
+    id                      UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    exchange_account_id     UUID         NOT NULL,
+    actual_cash             NUMERIC(30,8) NOT NULL,
+    total_allocated_capital NUMERIC(30,8) NOT NULL,
+    discrepancy             NUMERIC(30,8) NOT NULL,  -- actualCash - totalAllocated
+    threshold               NUMERIC(30,8) NOT NULL,
+    status                  VARCHAR(20)  NOT NULL,   -- OK | WARNING | CRITICAL
+    action_taken            TEXT,                     -- PAUSED_ALL | NOTIFIED_ADMIN
+    reconciled_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_reconciliation_account ON account_reconciliation_log
+    (exchange_account_id, reconciled_at DESC);
+```
+
+### allocatedCapital 수동 조정 API
+
+```
+PUT /admin/trade-registrations/{id}/allocated-capital
+Body: { newAllocatedCapital: 10000000 }
+Role: ADMIN
+```
 
 ---
 
@@ -700,6 +855,7 @@ CREATE TABLE processed_events (
 | `PUT` | `/trade-registrations/{id}/emergency-stop` | USER | 비상 정지 (즉시 모든 신호 처리 차단 + 미체결 주문 취소) |
 | `PUT` | `/trade-registrations/{id}/emergency-resume` | USER | 비상 정지 해제 (PAUSED 상태로 복귀 — 자동 재시작 안 함) |
 | `POST` | `/admin/trade-registrations/emergency-stop-all` | ADMIN | 전체 실거래 비상 정지 |
+| `PUT` | `/admin/trade-registrations/{id}/allocated-capital` | ADMIN | 할당 자본 수동 조정 (Account Reconciliation 불일치 해결) |
 
 ### Order
 
@@ -728,3 +884,5 @@ CREATE TABLE processed_events (
 | `TR011` | `ORDER_SUBMIT_FAILED` | Exchange Service 주문 제출 실패 |
 | `TR012` | `EMERGENCY_STOP_ACTIVE` | 비상 정지 상태이므로 주문 처리 불가 |
 | `TR013` | `NOT_EMERGENCY_STOPPED` | 비상 정지 상태가 아님 |
+| `TR014` | `ACCOUNT_BALANCE_INSUFFICIENT` | 거래소 계정 실제 잔고 부족 (Reconciliation 실패) |
+| `TR015` | `ALLOCATED_CAPITAL_INVALID` | allocatedCapital 값이 잘못됨 (음수 또는 실계좌 초과) |

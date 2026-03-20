@@ -194,9 +194,32 @@ data class ExecutionConfirmedEvent(
 
 ### 트리거 방식
 
-VirtualTradeScheduler는 **고정 주기(예: 1분)**로 실행된다.
+VirtualTradeScheduler는 **설정 가능한 고정 주기(기본: 1분)**로 실행된다.
 각 실행마다 ACTIVE 상태의 모든 `VirtualTradeRegistration`을 조회하고,
 각 `(agentId, symbolId)` 조합에 대해 Kafka 커맨드를 발행한다.
+
+**설정 예시**:
+```yaml
+# application.yml
+scheduler:
+  virtual-trade:
+    interval: 60000  # 밀리초 (기본: 1분)
+```
+
+```kotlin
+// VirtualTradeScheduler.kt
+@Component
+class VirtualTradeScheduler(
+    @Value("\${scheduler.virtual-trade.interval:60000}")
+    private val schedulerInterval: Long,
+    // ...
+) {
+    @Scheduled(fixedDelayString = "\${scheduler.virtual-trade.interval:60000}")
+    fun triggerAnalysis() {
+        // ...
+    }
+}
+```
 
 > 신호 분석의 캔들 주기(`interval`)는 Strategy 파라미터에 저장되어 있어 Agent Service가 결정한다.
 > VirtualTrade는 Strategy interval에 관계없이 고정 주기로 트리거만 발행한다.
