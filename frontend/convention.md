@@ -544,6 +544,41 @@ const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => { ... }
 // ✅ 중첩 조건은 얼리 리턴 또는 변수로 분리
 if (isLoading) return <Spinner />
 if (isError)   return <ErrorState />
+
+### 6.6 표준 폼(Form) 패턴
+
+`react-hook-form`과 `zod`를 조합하여 폼을 구현합니다.
+
+```typescript
+// ✅ 표준 폼 구조
+const schema = z.object({
+  name: z.string().min(1, '이름을 입력해주세요.'),
+})
+type FormValues = z.infer<typeof schema>
+
+export const AgentForm = () => {
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({
+    resolver: zodResolver(schema)
+  })
+
+  const onValid = (data: FormValues) => {
+    // 폼 제출 로직
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onValid)} className="flex flex-col gap-4">
+      <Input
+        {...register('name')}
+        label="에이전트 이름"
+        error={errors.name?.message}    // 에러 메시지 자동 노출
+        disabled={isSubmitting}
+      />
+      <Button type="submit" loading={isSubmitting}>저장</Button>
+    </form>
+  )
+}
+```
+
 ```
 
 ---
@@ -774,6 +809,18 @@ useMutation({
 // ❌ 컴포넌트 이벤트 핸들러에서 unhandled rejection 발생 금지
 ```
 
+### 10.4 UI 피드백 선택 기준 (Error & Feedback)
+
+에러의 성격과 심각도에 따라 사용자에게 알리는 방식을 통일합니다.
+
+| 방식 | 사용 시점 | 예시 |
+|------|-----------|------|
+| **Toast** | 일시적인 알림, 성공 피드백, 배경 작업 결과 | "저장되었습니다", "수집이 시작되었습니다" |
+| **Inline Alert** | 폼 입력 오류, 특정 영역의 로드 실패 | "이메일 형식이 올바르지 않습니다", "차트 로드 실패" |
+| **Modal** | 사용자 확인이 필수적인 오류, 시스템 장애, 비가역적 액션 경고 | "잔액이 부족합니다", "로그인 세션 만료", "정말 삭제하시겠습니까?" |
+| **Page Error** | 페이지 전체 진입 실패 (404, 403, 500) | "존재하지 않는 페이지입니다", "접근 권한이 없습니다" |
+
+
 ---
 
 ## 11. 성능 최적화 컨벤션
@@ -834,6 +881,34 @@ dayjs.extend(weekOfYear)
 // ❌ 플러그인 미등록 상태에서 d.week() 호출 → undefined 반환
 ```
 
+### 11.5 Web Worker & SSE 통신 프로토콜
+
+비동기 실시간 데이터 처리를 위해 통신 객체 구조를 통일합니다.
+
+#### Web Worker 메시지 포맷 (Command/Event)
+
+```typescript
+// ✅ Worker로 보내는 메시지 (Command)
+type WorkerCommand = 
+  | { type: 'CONNECT';    payload: { url: string, topics: string[] } }
+  | { type: 'DISCONNECT' }
+  | { type: 'SUBSCRIBE';  payload: { topic: string } }
+
+// ✅ Worker에서 받는 메시지 (Event)
+type WorkerEvent =
+  | { type: 'CONNECTED' }
+  | { type: 'DATA';       payload: { topic: string; data: any } }
+  | { type: 'ERROR';      payload: { message: string } }
+  | { type: 'HEALTH';     payload: { latency: number } }
+```
+
+#### SSE (Server-Sent Events) 처리 표준
+
+*   **훅 사용**: 도메인별 `useSSE` 커스텀 훅을 만들어 연결 관리(`EventSource`)를 캡슐화합니다.
+*   **Life Cycle**: 컴포넌트 언마운트 시 반드시 `eventSource.close()`를 호출합니다.
+*   **메시지 파싱**: `data` 필드는 항상 JSON으로 파싱하며, Zod 스키마로 검증 후 상태에 반영합니다.
+
+
 ---
 
 ## 12. 테스트 컨벤션
@@ -888,6 +963,21 @@ resolve: {
 | `features/*/model` | 70% 이상 | mutation 훅, 비즈니스 로직 |
 | `shared/ui` | 주요 컴포넌트 | Button, Badge, Toggle |
 
+### 12.5 시각적 회귀 테스트 (Visual Regression)
+
+UI 컴포넌트의 의도치 않은 스타일 변화를 방지합니다.
+
+*   **Loki**: 로컬 환경에서 스토리북과 연동하여 스냅샷 비교.
+*   **Chromatic**: CI 환경에서 PR별 UI 변경 내역 리뷰 및 승인.
+*   **수행 시점**: `shared/ui` 컴포넌트 수정 시 반드시 로컬에서 `npm run test:visual` 실행 후 스냅샷 갱신.
+
+### 12.6 도메인별 테스트 시나리오 예시
+
+*   **Happy Path**: "정상적인 입력 시 에이전트가 성공적으로 생성되어 목록으로 이동한다."
+*   **Error Case**: "API 서버가 500 에러를 반환할 경우, Modal 에러 팝업을 띄우고 폼 데이터를 유지한다."
+*   **Edge Case**: "시세 데이터가 10초 이상 중단될 경우, 차트를 회색조로 변경하고 경고 오버레이를 표시한다."
+
+
 ---
 
 ## 13. 환경 변수 규칙
@@ -912,6 +1002,19 @@ export const env = {
 // ✅ 컴포넌트에서 직접 import.meta.env 접근 금지
 // import { env } from '@shared/config/env' 로 통일
 ```
+
+### 13.2 i18n 키 네이밍 컨벤션
+
+`i18next` 사용 시 번역 키는 하이브리드 계층 구조(공통/페이지)를 따릅니다.
+
+*   **구조**: `[namespace].[scope].[component].[element]`
+*   **공통 키 (`common`)**: 여러 페이지에서 재사용되는 단어/문구
+    *   `common.button.save`, `common.label.confirm`, `common.status.success`
+*   **페이지 전용 키 (`pages`)**: 특정 페이지에서만 사용되는 문구
+    *   `pages.market.chart.title`, `pages.agent.setup.description`
+*   **변수 삽입 (Interpolation)**: `{{ }}`를 사용
+    *   `msg.error.retry`: "오류 발생 (재시도 {{count}}회)"
+
 
 ---
 
@@ -1128,6 +1231,16 @@ export const Button = ({ children, ...props }: ButtonProps) => (
 3. 디자인 토큰 기반으로 스타일 구현 (cn() 사용)
 4. shared/ui/index.ts에 export 추가
 5. 사용처에서 import 후 사용
+
+### 16.5 접근성(A11y) 필수 규칙
+
+*   **Interactive Elements**: 모든 버튼과 링크는 키보드로 포커스 가능해야 하며(`Tab`), `focus-visible` 스타일이 명확해야 합니다.
+*   **Labeling**: 아이콘만 있는 버튼은 반드시 `aria-label`을 제공합니다.
+    *   `<Button aria-label="닫기"><IconX /></Button>`
+*   **Contrast**: 텍스트와 배경의 대비는 WCAG AA 등급(4.5:1) 이상을 유지합니다. (디자인 시스템 토큰 사용 시 자동 보장)
+*   **Alt Text**: 의미 있는 이미지는 `alt` 속성을, 장식용 아이콘은 `aria-hidden="true"`를 부여합니다.
+*   **Status Announcements**: 실시간 상태 변화나 에러 메시지는 시각 장애 사용자를 위해 `role="status"` 또는 `aria-live="polite"`를 고려합니다.
+
 ```
 
 ---
