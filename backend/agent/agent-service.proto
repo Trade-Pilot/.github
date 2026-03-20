@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package agent;
+
+option java_package = "com.tradepilot.agent.grpc";
+option java_multiple_files = true;
+
+import "market-service.proto";
+
+// ============================================
+// Agent Service
+// 백테스팅 전략 실행을 위한 gRPC 서비스
+// 소비자: Simulation Service
+// ============================================
+service Agent {
+  // 백테스팅 전략 실행 (Server Streaming)
+  // Simulation Service가 과거 캔들 데이터를 전달하면,
+  // Agent의 Strategy + RiskConfig 기반으로 각 캔들 시점의 신호를 스트리밍 반환한다.
+  // Agent 상태와 무관하게 요청을 수락한다.
+  // 스트림 정상 완료(onCompleted) 시 BacktestResult를 DB에 저장한다.
+  // 스트림 실패(onError) 시 BacktestResult를 저장하지 않는다.
+  // 타임아웃: 30분
+  rpc BacktestStrategy(BacktestRequest) returns (stream BacktestSignalResponse);
+}
+
+// ============================================
+// Backtest Messages
+// ============================================
+
+// 백테스팅 요청
+// Simulation Service가 Market Service에서 조회한 과거 캔들을 함께 전달한다
+message BacktestRequest {
+  string                       agent_id  = 1;  // Agent 고유 식별자 (UUID)
+  string                       symbol_id = 2;  // 심볼 고유 식별자 (UUID)
+  repeated market.CandleProto  candles   = 3;  // 과거 캔들 데이터 (시간 오름차순)
+}
+
+// 백테스팅 신호 응답 (스트리밍)
+// 각 캔들 시점마다 전략 평가 결과를 반환한다
+// Agent의 initialCapital로 인메모리 임시 포트폴리오를 관리하며 포지션 사이징을 반영한다
+message BacktestSignalResponse {
+  string signal_type        = 1;  // 신호 타입 — BUY, SELL, HOLD
+  double confidence         = 2;  // 신뢰도 (0.0 ~ 1.0)
+  string reason_json        = 3;  // 신호 생성 근거 — JSON 문자열 (지표 값, 조건 평가 결과 등)
+  string candle_open_time   = 4;  // 해당 캔들 시작 시각 — ISO-8601
+  double suggested_quantity = 5;  // 제안 수량 (RiskConfig 기반 포지션 사이징 결과)
+  double cash_after         = 6;  // 신호 반영 후 잔여 현금
+  double total_value_after  = 7;  // 신호 반영 후 총자산 평가액
+}

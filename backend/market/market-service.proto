@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package market;
+
+option java_package = "com.tradepilot.market.grpc";
+option java_multiple_files = true;
+
+// ============================================
+// Market Candle Service
+// 캔들 데이터 조회를 위한 gRPC 서비스
+// 소비자: Agent Service, Simulation Service, VirtualTrade Service, Trade Service
+// ============================================
+service MarketCandle {
+  // 최근 N개 캔들 조회
+  // Agent Service — 전략 신호 생성 시 최근 캔들 참조
+  // VirtualTrade / Trade Service — 현재가 조회 (limit=1)
+  // 타임아웃: 5초
+  rpc GetRecentCandles(GetRecentCandlesRequest) returns (GetRecentCandlesResponse);
+
+  // 기간 기반 과거 캔들 조회
+  // Simulation Service — 백테스팅용 대량 캔들 조회
+  // 타임아웃: 30초 (대용량 데이터)
+  rpc GetHistoricalCandles(GetHistoricalCandlesRequest) returns (GetHistoricalCandlesResponse);
+}
+
+// ============================================
+// Market Symbol Service
+// 심볼 메타데이터 조회를 위한 gRPC 서비스
+// 소비자: Agent Service, Trade Service
+// ============================================
+service MarketSymbol {
+  // 단일 심볼 메타데이터 조회
+  // Redis 캐싱 적용 (TTL 10분, Key: symbol:{symbolIdentifier})
+  // 타임아웃: 3초
+  rpc GetSymbol(GetSymbolRequest) returns (GetSymbolResponse);
+
+  // 여러 심볼 일괄 조회
+  // 타임아웃: 10초
+  rpc GetSymbols(GetSymbolsRequest) returns (GetSymbolsResponse);
+
+  // 거래 가능한 심볼 목록 조회 (페이징 지원)
+  // 기본 페이지 크기: 100, 최대: 1000
+  // 타임아웃: 10초
+  rpc ListSymbols(ListSymbolsRequest) returns (ListSymbolsResponse);
+}
+
+// ============================================
+// Candle Messages
+// ============================================
+
+// 최근 캔들 조회 요청
+message GetRecentCandlesRequest {
+  string symbol_id = 1;  // 심볼 고유 식별자 (UUID)
+  string interval  = 2;  // 캔들 간격 — MarketCandleInterval enum 값 (MIN_1, MIN_5, MIN_60, DAY 등)
+  int32  limit     = 3;  // 조회 개수 (최대 1000개)
+}
+
+// 최근 캔들 조회 응답
+message GetRecentCandlesResponse {
+  repeated CandleProto candles = 1;  // 시간 내림차순 정렬
+}
+
+// 과거 캔들 조회 요청 (기간 기반)
+message GetHistoricalCandlesRequest {
+  string symbol_id = 1;  // 심볼 고유 식별자 (UUID)
+  string interval  = 2;  // 캔들 간격 — MarketCandleInterval enum 값 (MIN_1, MIN_5, MIN_60, DAY 등)
+  string from      = 3;  // 조회 시작 시각 — ISO-8601 (예: 2024-01-01T00:00:00Z)
+  string to        = 4;  // 조회 종료 시각 — ISO-8601
+}
+
+// 과거 캔들 조회 응답
+message GetHistoricalCandlesResponse {
+  repeated CandleProto candles = 1;  // 시간 오름차순 정렬
+}
+
+// 캔들 데이터
+// BigDecimal 값은 정밀도 손실 방지를 위해 String으로 직렬화한다
+message CandleProto {
+  string symbol_id = 1;  // 심볼 고유 식별자 (UUID)
+  string interval  = 2;  // 캔들 간격
+  string time      = 3;  // 캔들 시작 시각 — ISO-8601
+  string open      = 4;  // 시가 (BigDecimal → String)
+  string high      = 5;  // 고가 (BigDecimal → String)
+  string low       = 6;  // 저가 (BigDecimal → String)
+  string close     = 7;  // 종가 (BigDecimal → String)
+  string volume    = 8;  // 거래량 (BigDecimal → String)
+  string amount    = 9;  // 거래대금 (BigDecimal → String)
+}
+
+// ============================================
+// Symbol Messages
+// ============================================
+
+// 단일 심볼 조회 요청
+message GetSymbolRequest {
+  string symbol_id = 1;  // 심볼 고유 식별자 (UUID)
+}
+
+// 단일 심볼 조회 응답
+message GetSymbolResponse {
+  SymbolProto symbol = 1;
+}
+
+// 여러 심볼 일괄 조회 요청
+message GetSymbolsRequest {
+  repeated string symbol_ids = 1;  // 심볼 고유 식별자 배열 (UUID[])
+}
+
+// 여러 심볼 일괄 조회 응답
+message GetSymbolsResponse {
+  repeated SymbolProto symbols = 1;
+}
+
+// 심볼 목록 조회 요청 (페이징)
+message ListSymbolsRequest {
+  string market = 1;  // 시장 타입 — COIN, STOCK
+  string status = 2;  // 심볼 상태 필터 — LISTED, WARNING, CAUTION, TRADING_HALTED, DELISTED (선택, 기본값: LISTED)
+  int32  page   = 3;  // 페이지 번호 (0부터 시작)
+  int32  size   = 4;  // 페이지 크기 (기본 100, 최대 1000)
+}
+
+// 심볼 목록 조회 응답
+message ListSymbolsResponse {
+  repeated SymbolProto symbols = 1;
+  int32 total_count = 2;  // 전체 심볼 수
+}
+
+// 심볼 메타데이터
+message SymbolProto {
+  string symbol_id = 1;  // 심볼 고유 식별자 (UUID)
+  string code      = 2;  // 심볼 코드 (예: KRW-BTC)
+  string name      = 3;  // 심볼 이름 (예: 비트코인)
+  string market    = 4;  // 시장 타입 — COIN, STOCK
+  string status    = 5;  // 심볼 상태 — LISTED, WARNING, CAUTION, TRADING_HALTED, DELISTED
+}
