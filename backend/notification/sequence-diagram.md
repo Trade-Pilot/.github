@@ -17,10 +17,10 @@ sequenceDiagram
     participant Discord as Discord Webhook
 
     Kafka-->>Listener: NOTIFICATION_COMMAND_TOPIC
-    Note over Kafka: userId, eventType=VIRTUAL_ORDER_FILLED, variables
+    Note over Kafka: userIdentifier, eventType=VIRTUAL_ORDER_FILLED, variables
 
     activate Listener
-    Listener->>Dispatcher: dispatch(userId, VIRTUAL_ORDER_FILLED, variables)
+    Listener->>Dispatcher: dispatch(userIdentifier, VIRTUAL_ORDER_FILLED, variables)
 
     activate Dispatcher
     Dispatcher->>DB: SELECT preference
@@ -99,7 +99,7 @@ sequenceDiagram
 
     Note over Market: retryCount >= MAX_RETRY_COUNT (3)
     Market->>Kafka: NOTIFICATION_COMMAND_TOPIC
-    Note over Kafka: userId=ADMIN_USER_ID, eventType=MARKET_COLLECT_ERROR, variables
+    Note over Kafka: userIdentifier=ADMIN_USER_ID, eventType=MARKET_COLLECT_ERROR, variables
 
     Kafka-->>Listener: Consume
     Listener->>Dispatcher: dispatch(ADMIN_USER_ID, MARKET_COLLECT_ERROR, variables)
@@ -128,7 +128,7 @@ sequenceDiagram
     participant DB as Database
 
     Kafka-->>Listener: USER_WITHDRAWN_EVENT_TOPIC
-    Note over Kafka: userId, withdrawnAt
+    Note over Kafka: userIdentifier, withdrawnAt
 
     activate Listener
     Listener->>Handler: handle(UserWithdrawnEvent)
@@ -136,9 +136,9 @@ sequenceDiagram
 
     activate Handler
     Handler->>DB: UPDATE notification_preference SET is_deleted=true, deleted_at=NOW()
-    Note over DB: WHERE user_identifier = userId
+    Note over DB: WHERE user_identifier = userIdentifier
     Handler->>DB: UPDATE notification_channel SET is_deleted=true, deleted_at=NOW()
-    Note over DB: WHERE user_identifier = userId
+    Note over DB: WHERE user_identifier = userIdentifier
     Note over Handler: NotificationLog는 감사 목적으로 영구 보존
 
     deactivate Handler
@@ -160,18 +160,18 @@ sequenceDiagram
     Note over Client: Body: type=DISCORD, webhookUrl=https://discord.com/api/webhooks/...
     Note over GW: JWT 검증 → X-User-Id 헤더
 
-    GW->>NS: CreateChannelCommand(userId, DISCORD, DiscordConfig)
+    GW->>NS: CreateChannelCommand(userIdentifier, DISCORD, DiscordConfig)
 
     activate NS
     NS->>NS: webhookUrl 형식 검증
     Note over NS: https://discord.com/api/webhooks/ 로 시작하는지 확인
 
     NS->>DB: BEGIN TRANSACTION
-    NS->>NS: NotificationChannelFactory.create(userId, DISCORD, DiscordConfig)
+    NS->>NS: NotificationChannelFactory.create(userIdentifier, DISCORD, DiscordConfig)
     NS->>DB: INSERT notification_channel
     NS->>DB: COMMIT
 
-    NS-->>GW: 201 Created (channelId)
+    NS-->>GW: 201 Created (channelIdentifier)
     GW-->>Client: 201 Created
     deactivate NS
 ```
@@ -192,7 +192,7 @@ sequenceDiagram
     Client->>GW: GET /notification-preferences
     Note over GW: X-User-Id 헤더
 
-    GW->>NS: GetPreferencesQuery(userId)
+    GW->>NS: GetPreferencesQuery(userIdentifier)
     NS->>DB: SELECT preference WHERE user_id=? AND is_deleted=false
 
     Note over NS: DB에 없는 eventType은 기본값(isEnabled=false, channels=[])으로 응답
@@ -215,10 +215,10 @@ sequenceDiagram
     Note over Client: Body: isEnabled=true, channelIds=[uuid1, uuid2]
     Note over GW: X-User-Id 헤더
 
-    GW->>NS: UpdatePreferenceCommand(userId, VIRTUAL_ORDER_FILLED, isEnabled, channelIds)
+    GW->>NS: UpdatePreferenceCommand(userIdentifier, VIRTUAL_ORDER_FILLED, isEnabled, channelIds)
 
     activate NS
-    NS->>DB: SELECT channel WHERE identifier IN (channelIds) AND user_id=userId
+    NS->>DB: SELECT channel WHERE identifier IN (channelIds) AND user_id=userIdentifier
     Note over NS: 본인 소유 채널인지 + is_deleted=false 검증
 
     alt 타인 채널 또는 삭제된 채널 포함
@@ -253,7 +253,7 @@ sequenceDiagram
     Client->>GW: GET /notification-logs?from=2024-01-01&to=2024-01-31&page=0&size=20
     Note over GW: X-User-Id 헤더
 
-    GW->>NS: GetLogsQuery(userId, from, to, pageable)
+    GW->>NS: GetLogsQuery(userIdentifier, from, to, pageable)
     NS->>DB: SELECT notification_log
     Note over DB: WHERE user_id=? AND created_at BETWEEN ? AND ?
     Note over DB: ORDER BY created_at DESC LIMIT 20 OFFSET 0
@@ -273,11 +273,11 @@ sequenceDiagram
     participant NS as NotificationTemplateCommandService
     participant DB as Database
 
-    Admin->>GW: PUT /notification-templates/{templateId}
+    Admin->>GW: PUT /notification-templates/{templateIdentifier}
     Note over Admin: Body: titleTemplate, bodyTemplate
     Note over GW: X-User-Role = ADMIN 검증
 
-    GW->>NS: UpdateTemplateCommand(templateId, titleTemplate, bodyTemplate)
+    GW->>NS: UpdateTemplateCommand(templateIdentifier, titleTemplate, bodyTemplate)
     NS->>DB: UPDATE notification_template
     NS-->>GW: 200 OK
     GW-->>Admin: 200 OK
@@ -310,11 +310,11 @@ sequenceDiagram
 @KafkaListener(
     topics = [NOTIFICATION_COMMAND_TOPIC],
     groupId = "notification-command-consumer",
-    concurrency = 5,   // userId 파티션 키 → 동일 사용자 순서 보장
+    concurrency = 5,   // userIdentifier 파티션 키 → 동일 사용자 순서 보장
 )
 fun consumeNotificationCommands(record: ConsumerRecord<String, String>) {
     val command = objectMapper.readValue(record.value(), SendNotificationCommand::class.java)
-    notificationDispatcher.dispatch(command.userId, command.eventType, command.variables)
+    notificationDispatcher.dispatch(command.userIdentifier, command.eventType, command.variables)
 }
 
 // 회원 탈퇴 이벤트 (도메인 이벤트, 별도 그룹)
@@ -329,7 +329,7 @@ fun consumeUserEvents(record: ConsumerRecord<String, String>) {
 }
 ```
 
-> 파티션 키 = `userId`이므로 동일 사용자의 이벤트는 순서가 보장되며 동시에 처리되지 않는다.
+> 파티션 키 = `userIdentifier`이므로 동일 사용자의 이벤트는 순서가 보장되며 동시에 처리되지 않는다.
 
 ---
 

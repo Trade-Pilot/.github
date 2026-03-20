@@ -11,7 +11,7 @@ sequenceDiagram
     Note over User, DB: 1단계 — 전략 생성 (DRAFT)
     User ->> API: POST /strategies { name, type, parameters }
     API  ->> DB:  INSERT strategy (status=DRAFT)
-    API -->> User: 201 { strategyId, status: DRAFT }
+    API -->> User: 201 { strategyIdentifier, status: DRAFT }
 
     Note over User, DB: 2단계 — 백테스팅 완료 후 VALIDATED 전환
     Note right of User: Simulation 서비스가 백테스팅 완료 후<br>사용자가 직접 호출 (또는 Simulation이 API 호출)
@@ -31,11 +31,11 @@ sequenceDiagram
     participant DB  as PostgreSQL
 
     Note over User, DB: 1단계 — 에이전트 생성 (INACTIVE)
-    User ->> API: POST /agents { name, strategyId, riskConfig }
-    API  ->> DB:  SELECT strategy WHERE id=strategyId AND status=VALIDATED
-    DB  -->> API: strategy (VALIDATED 검증)
+    User ->> API: POST /agents { name, strategyIdentifier, riskConfig }
+    API  ->> DB:  SELECT strategy WHERE id=strategyIdentifier AND status != DEPRECATED
+    DB  -->> API: strategy (DEPRECATED 아님 검증 — DRAFT/VALIDATED 모두 허용)
     API  ->> DB:  INSERT agent (status=INACTIVE, strategy_id, risk_config)
-    API -->> User: 201 { agentId, status: INACTIVE }
+    API -->> User: 201 { agentIdentifier, status: INACTIVE }
 
     Note over User, DB: 2단계 — 에이전트 활성화 + 포트폴리오 초기화
     User ->> API: PUT /agents/{id}/activate { initialCapital }
@@ -57,39 +57,39 @@ sequenceDiagram
     participant MKT   as Market Service (gRPC)
     participant DB    as PostgreSQL
 
-    VT ->> Kafka: CommandBaseMessageEnvelope<AnalyzeAgentCommand><br>topic: command.agent.virtual-trade.analyze-strategy<br>{ agentId, symbolId, interval, currentPrice }<br>callback: reply.virtual-trade.agent.analyze-strategy
+    VT ->> Kafka: CommandBaseMessageEnvelope<AnalyzeAgentCommand><br>topic: command.agent.virtual-trade.analyze-strategy<br>{ agentIdentifier, symbolIdentifier, currentPrice }<br>callback: reply.virtual-trade.agent.analyze-strategy
 
     Kafka ->> AG: AnalyzeAgentCommand
 
     AG ->> AG: 멱등성 확인 (processed_events)
 
-    AG ->> Redis: GET agent:{agentId}
+    AG ->> Redis: GET agent:{agentIdentifier}
     alt Cache Miss
-        AG ->> DB: SELECT agent WHERE id=agentId
-        AG ->> Redis: SET agent:{agentId} TTL 10m
+        AG ->> DB: SELECT agent WHERE id=agentIdentifier
+        AG ->> Redis: SET agent:{agentIdentifier} TTL 10m
     end
     AG ->> AG: agent.status == ACTIVE 검증
 
-    AG ->> Redis: GET strategy:{strategyId}
+    AG ->> Redis: GET strategy:{strategyIdentifier}
     alt Cache Miss
-        AG ->> DB: SELECT strategy WHERE id=agent.strategyId
-        AG ->> Redis: SET strategy:{strategyId} TTL 10m
+        AG ->> DB: SELECT strategy WHERE id=agent.strategyIdentifier
+        AG ->> Redis: SET strategy:{strategyIdentifier} TTL 10m
     end
 
-    AG ->> MKT: gRPC GetRecentCandles { symbolId, interval, limit }
+    AG ->> MKT: gRPC GetRecentCandles { symbolIdentifier, interval, limit }
     MKT -->> AG: candles[]
 
     AG ->> AG: StrategyExecutorFactory.create(strategy)
     AG ->> AG: executor.analyze(candles) → SignalConditionResult
     Note right of AG: Strategy는 포트폴리오를 모름<br>순수하게 BUY/SELL/HOLD 조건만 평가
 
-    AG ->> DB: SELECT portfolio WHERE agent_id=agentId
+    AG ->> DB: SELECT portfolio WHERE agent_id=agentIdentifier
     DB -->> AG: portfolio (cash, positions)
 
     AG ->> AG: AgentRiskManager.applySizing(<br>  condition, portfolio, riskConfig, currentPrice<br>) → SignalResult
     Note right of AG: Agent의 RiskConfig 기반으로<br>포지션 크기 결정
 
-    AG ->> DB: INSERT signal (agentId, strategyId, ...) — BUY/SELL만
+    AG ->> DB: INSERT signal (agentIdentifier, strategyIdentifier, ...) — BUY/SELL만
     AG ->> DB: UPDATE portfolio.reserved_cash (BUY 신호 점유)<br>UPDATE position.reserved_quantity (SELL 신호 점유)
     AG ->> DB: INSERT processed_events
 
@@ -108,11 +108,11 @@ sequenceDiagram
     participant AG  as Agent Service
     participant DB  as PostgreSQL
 
-    SIM ->> AG: gRPC BacktestStrategy { agentId, symbolId, candles[] }
+    SIM ->> AG: gRPC BacktestStrategy { agentIdentifier, symbolIdentifier, candles[] }
     Note right of SIM: 대용량 캔들 배열 전달 (수십만 건)
 
-    AG ->> DB: SELECT agent WHERE id=agentId
-    AG ->> DB: SELECT strategy WHERE id=agent.strategyId
+    AG ->> DB: SELECT agent WHERE id=agentIdentifier
+    AG ->> DB: SELECT strategy WHERE id=agent.strategyIdentifier
     DB -->> AG: agent + strategy
 
     AG ->> AG: StrategyExecutorFactory.create(strategy)
@@ -143,14 +143,14 @@ sequenceDiagram
 
     User ->> API: PUT /agents/{id}/pause
     API  ->> DB:  UPDATE agent SET status=PAUSED
-    API  ->> Redis: DEL agent:{agentId}
+    API  ->> Redis: DEL agent:{agentIdentifier}
     API -->> User: 200 OK
 
     Note right of API: 이후 AnalyzeAgentCommand 수신 시<br>ACTIVE 검증 실패 → A006 에러 Reply 발행
 
     User ->> API: PUT /agents/{id}/resume
     API  ->> DB:  UPDATE agent SET status=ACTIVE
-    API  ->> Redis: DEL agent:{agentId}
+    API  ->> Redis: DEL agent:{agentIdentifier}
     API -->> User: 200 OK
 ```
 
@@ -165,15 +165,15 @@ sequenceDiagram
     participant Redis
     participant DB   as PostgreSQL
 
-    Kafka ->> AG: trade-pilot.userservice.user<br>{ eventType: "user-withdrawn", userId }
+    Kafka ->> AG: trade-pilot.userservice.user<br>{ eventType: "user-withdrawn", userIdentifier }
 
     AG ->> AG: 멱등성 확인 (processed_events)
 
-    AG ->> DB: SELECT agent WHERE user_id=userId<br>AND status != TERMINATED
+    AG ->> DB: SELECT agent WHERE user_id=userIdentifier<br>AND status != TERMINATED
 
     loop 각 agent
         AG ->> DB: UPDATE agent SET status=TERMINATED
-        AG ->> Redis: DEL agent:{agentId}
+        AG ->> Redis: DEL agent:{agentIdentifier}
     end
 
     Note right of AG: Strategy / Portfolio / Signal / Position<br>은 감사 목적으로 모두 보존

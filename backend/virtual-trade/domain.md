@@ -71,10 +71,10 @@ infrastructure/
 
 ```
 VirtualTradeRegistration (Aggregate Root)
-├── registrationId : UUID
-├── agentId        : UUID              -- Agent Service 참조 (FK 없음, 별도 서비스)
-├── userId         : UUID
-├── symbolIds      : List<UUID>        -- 분석 대상 심볼 목록 (JSONB)
+├── registrationIdentifier : UUID
+├── agentIdentifier        : UUID              -- Agent Service 참조 (FK 없음, 별도 서비스)
+├── userIdentifier         : UUID
+├── symbolIdentifiers      : List<UUID>        -- 분석 대상 심볼 목록 (JSONB)
 ├── status         : RegistrationStatus
 ├── createdAt      : OffsetDateTime
 └── updatedAt      : OffsetDateTime
@@ -107,15 +107,15 @@ STOPPED
 ```
 
 > Agent Service에서 Agent가 TERMINATED되면
-> VirtualTrade Service도 해당 registrationId를 STOPPED 처리한다 (이벤트 연동).
+> VirtualTrade Service도 해당 registrationIdentifier를 STOPPED 처리한다 (이벤트 연동).
 >
-> `symbolIds`는 ACTIVE / PAUSED 상태에서만 수정 가능하다.
+> `symbolIdentifiers`는 ACTIVE / PAUSED 상태에서만 수정 가능하다.
 > STOPPED 상태는 복구 불가.
 
-### symbolIds 설계 원칙
+### symbolIdentifiers 설계 원칙
 
 - 하나의 Registration이 여러 심볼을 추적할 수 있다.
-- 스케줄러 실행 시 각 `(agentId, symbolId)` 조합마다 독립적으로 `AnalyzeAgentCommand`를 발행한다.
+- 스케줄러 실행 시 각 `(agentIdentifier, symbolIdentifier)` 조합마다 독립적으로 `AnalyzeAgentCommand`를 발행한다.
 - 심볼별로 각각 현재가를 조회한 후 발행한다.
 
 ---
@@ -129,21 +129,21 @@ interface RegisterVirtualTradeUseCase {
 }
 
 interface ActivateRegistrationUseCase {
-    fun activate(registrationId: UUID): VirtualTradeRegistration
+    fun activate(registrationIdentifier: UUID): VirtualTradeRegistration
 }
 
 interface PauseRegistrationUseCase {
-    fun pause(registrationId: UUID): VirtualTradeRegistration
+    fun pause(registrationIdentifier: UUID): VirtualTradeRegistration
 }
 
 interface StopRegistrationUseCase {
-    fun stop(registrationId: UUID): VirtualTradeRegistration
+    fun stop(registrationIdentifier: UUID): VirtualTradeRegistration
 }
 
 data class RegisterVirtualTradeCommand(
-    val agentId   : UUID,
-    val userId    : UUID,
-    val symbolIds : List<UUID>,
+    val agentIdentifier   : UUID,
+    val userIdentifier    : UUID,
+    val symbolIdentifiers : List<UUID>,
 )
 
 interface HandleAgentReplyUseCase {
@@ -152,9 +152,9 @@ interface HandleAgentReplyUseCase {
 
 // Output Ports
 interface FindRegistrationOutput {
-    fun findById(registrationId: UUID): VirtualTradeRegistration?
+    fun findById(registrationIdentifier: UUID): VirtualTradeRegistration?
     fun findAllByStatus(status: RegistrationStatus): List<VirtualTradeRegistration>
-    fun findByAgentId(agentId: UUID): VirtualTradeRegistration?
+    fun findByAgentId(agentIdentifier: UUID): VirtualTradeRegistration?
 }
 
 interface SaveRegistrationOutput {
@@ -163,7 +163,7 @@ interface SaveRegistrationOutput {
 
 // Market Service에서 심볼의 현재가(최근 캔들 종가) 조회
 interface FindCurrentPriceOutput {
-    fun getCurrentPrice(symbolId: UUID, interval: CandleInterval): BigDecimal
+    fun getCurrentPrice(symbolIdentifier: UUID, interval: CandleInterval): BigDecimal
 }
 
 // Kafka AnalyzeAgentCommand 발행
@@ -177,9 +177,9 @@ interface PublishExecutionConfirmedOutput {
 }
 
 data class ExecutionConfirmedEvent(
-    val agentId    : UUID,
-    val signalId   : UUID,           // Agent Service가 저장한 Signal ID (필수)
-    val symbolId   : UUID,
+    val agentIdentifier    : UUID,
+    val signalIdentifier   : UUID,           // Agent Service가 저장한 Signal ID (필수)
+    val symbolIdentifier   : UUID,
     val side       : OrderSide,      // BUY | SELL
     val quantity   : BigDecimal,     // 체결 수량 (= suggestedQuantity)
     val price      : BigDecimal,     // 체결가 (= AnalyzeAgentReply.price)
@@ -196,7 +196,7 @@ data class ExecutionConfirmedEvent(
 
 VirtualTradeScheduler는 **설정 가능한 고정 주기(기본: 1분)**로 실행된다.
 각 실행마다 ACTIVE 상태의 모든 `VirtualTradeRegistration`을 조회하고,
-각 `(agentId, symbolId)` 조합에 대해 Kafka 커맨드를 발행한다.
+각 `(agentIdentifier, symbolIdentifier)` 조합에 대해 Kafka 커맨드를 발행한다.
 
 **설정 예시**:
 ```yaml
@@ -231,18 +231,39 @@ class VirtualTradeScheduler(
 [매 1분 실행]
 1. FindRegistrationOutput.findAllByStatus(ACTIVE) → List<VirtualTradeRegistration>
 2. 각 registration에 대해:
-   각 symbolId에 대해:
-     a. FindCurrentPriceOutput.getCurrentPrice(symbolId, interval=MINUTE_1)
+   각 symbolIdentifier에 대해:
+     a. FindCurrentPriceOutput.getCurrentPrice(symbolIdentifier, interval=MINUTE_1)
         └ MarketCandleGrpcAdapter.getRecentCandles(limit=1).close
      b. PublishAnalyzeCommandOutput.publish(
           topic   = "command.agent.virtual-trade.analyze-strategy",
-          command = AnalyzeAgentCommand(agentId, symbolId, currentPrice)
+          command = AnalyzeAgentCommand(agentIdentifier, symbolIdentifier, currentPrice)
         )
 3. 발행 실패 시 로그 기록 (재시도는 Kafka producer retry 정책 위임)
 ```
 
-> currentPrice 조회 실패 시 해당 `(agentId, symbolId)` 쌍의 발행을 건너뛰고 로그를 남긴다.
+> currentPrice 조회 실패 시 해당 `(agentIdentifier, symbolIdentifier)` 쌍의 발행을 건너뛰고 로그를 남긴다.
 > 다른 조합의 발행은 계속 진행한다.
+
+### 신호 생성~가상 체결 사이 시간차
+
+스케줄러가 `AnalyzeAgentCommand`를 발행한 시점과 `AnalyzeAgentReply`를 수신하여 가상 체결을 확정하는 시점 사이에는
+Kafka 전송 + Agent Service 처리 시간만큼의 **지연이 발생**한다 (일반적으로 수백ms ~ 수초).
+
+이 시간차로 인해 다중 심볼 동시 분석 시 다음과 같은 상황이 발생할 수 있다:
+- BTC 신호는 1초 만에 반환되어 즉시 가상 체결
+- ETH 신호는 3초 후 반환되어 가상 체결 — 이 시점에 Portfolio는 이미 BTC 체결이 반영된 상태
+
+이는 **가상거래 특성상 허용 가능한 불일치**이다.
+Agent Service의 Portfolio Lock이 순차 처리를 보장하므로 데이터 무결성은 유지된다.
+
+### Reply 수신 실패 처리
+
+Agent Service에서 AnalyzeAgentReply가 3분 이상 도착하지 않으면,
+Agent의 `reservedCash` / `reservedQuantity`가 점유된 채로 남게 된다.
+
+> 이 경우 Agent Service의 **Portfolio Reconciliation (매일 자정)** 에서 불일치가 감지되며,
+> 관리자 알림이 발송된다. 즉각적인 복구가 필요하면 Agent를 PAUSED → resume 하거나,
+> 관리자가 직접 점유를 해제할 수 있는 Admin API 도입을 검토한다.
 
 ---
 
@@ -255,8 +276,8 @@ class VirtualTradeScheduler(
 // command.agent.virtual-trade.analyze-strategy
 
 data class AnalyzeAgentCommand(
-    val agentId      : UUID,
-    val symbolId     : UUID,
+    val agentIdentifier      : UUID,
+    val symbolIdentifier     : UUID,
     val currentPrice : BigDecimal,
 ) : CommandBaseMessage
 ```
@@ -268,10 +289,10 @@ data class AnalyzeAgentCommand(
 // reply.agent.virtual-trade.analyze-strategy (예시)
 
 data class AnalyzeAgentReply(
-    val agentId           : UUID,
-    val signalId          : UUID?,        // BUY/SELL이면 Agent Service가 저장한 Signal ID, HOLD이면 null
-    val strategyId        : UUID,
-    val symbolId          : UUID,
+    val agentIdentifier           : UUID,
+    val signalIdentifier          : UUID?,        // BUY/SELL이면 Agent Service가 저장한 Signal ID, HOLD이면 null
+    val strategyIdentifier : UUID,
+    val symbolIdentifier          : UUID,
     val signalType        : SignalType,
     val confidence        : BigDecimal,
     val suggestedQuantity : BigDecimal,
@@ -288,9 +309,9 @@ data class AnalyzeAgentReply(
    - HOLD       : 단순 로그. 처리 종료.
    - BUY / SELL :
        a. ExecutionConfirmedEvent 생성
-            agentId    = reply.agentId
-            signalId   = reply.signalId  (Agent Service가 저장한 Signal의 ID)
-            symbolId   = reply.symbolId
+            agentIdentifier    = reply.agentIdentifier
+            signalIdentifier   = reply.signalIdentifier  (Agent Service가 저장한 Signal의 ID)
+            symbolIdentifier   = reply.symbolIdentifier
             side       = reply.signalType (BUY → BUY, SELL → SELL)
             quantity   = reply.suggestedQuantity
             price      = reply.price
@@ -308,7 +329,7 @@ data class AnalyzeAgentReply(
 
 ```
 구독 토픽 : trade-pilot.agentservice.agent  (eventType: "agent-terminated")
-처리      : agentId에 해당하는 VirtualTradeRegistration → STOPPED 처리
+처리      : agentIdentifier에 해당하는 VirtualTradeRegistration → STOPPED 처리
 ```
 
 ---
@@ -397,7 +418,7 @@ CREATE TABLE processed_events (
 
 | Method | 경로 | Role | 설명 |
 |--------|------|------|------|
-| `POST` | `/virtual-trades` | USER | 가상거래 등록 (agentId + symbolIds) |
+| `POST` | `/virtual-trades` | USER | 가상거래 등록 (agentIdentifier + symbolIdentifiers) |
 | `GET` | `/virtual-trades` | USER | 내 가상거래 등록 목록 |
 | `GET` | `/virtual-trades/{id}` | USER | 등록 상세 |
 | `PUT` | `/virtual-trades/{id}/activate` | USER | ACTIVE 전환 |
@@ -416,5 +437,5 @@ CREATE TABLE processed_events (
 | `VT003` | `REGISTRATION_STOPPED` | STOPPED 상태는 재활성화 불가 |
 | `VT004` | `REGISTRATION_NOT_ACTIVE` | ACTIVE 상태가 아니어서 일시정지 불가 |
 | `VT005` | `REGISTRATION_NOT_PAUSED` | PAUSED 상태가 아니어서 재활성화 불가 |
-| `VT006` | `SYMBOL_IDS_EMPTY` | symbolIds는 최소 1개 이상 필요 |
+| `VT006` | `SYMBOL_IDS_EMPTY` | symbolIdentifiers는 최소 1개 이상 필요 |
 | `VT007` | `CURRENT_PRICE_UNAVAILABLE` | Market Service에서 현재가 조회 실패 |

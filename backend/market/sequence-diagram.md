@@ -21,13 +21,13 @@ sequenceDiagram
 
     activate Service
     Service->>Kafka: FIND_ALL_MARKET_SYMBOL_COMMAND
-    Note over Kafka: requestId: UUID
+    Note over Kafka: requestIdentifier: UUID
     deactivate Service
 
     Note over Kafka,EventPub: Exchange Service 처리 (별도 서비스)
 
     Kafka-->>Service: FIND_ALL_MARKET_SYMBOL_REPLY
-    Note over Service: requestId 매칭
+    Note over Service: requestIdentifier 매칭
 
     activate Service
     Service->>Service: collectMarketSymbol(symbols)
@@ -114,18 +114,18 @@ sequenceDiagram
     loop 각 작업별
         Service->>DB: SELECT MarketSymbol
         Service->>Kafka: FIND_ALL_MARKET_CANDLE_COMMAND
-        Note over Kafka: code: KRW-BTC<br/>interval: MIN_1<br/>startDate: lastCollectedTime - 2분<br/>limit: 200<br/>requestId: taskId
+        Note over Kafka: code: KRW-BTC<br/>interval: MIN_1<br/>startDate: lastCollectedTime - 2분<br/>limit: 200<br/>requestIdentifier: taskIdentifier
     end
 
     Note over Kafka: Exchange Service 처리
 
     alt 수집 성공
         Kafka-->>Service: FIND_ALL_MARKET_CANDLE_REPLY
-        Service->>Service: collectMarketCandle(taskId, candles)
+        Service->>Service: collectMarketCandle(taskIdentifier, candles)
         Note over Service: 2.2 참조
     else 수집 실패
         Kafka-->>Service: FIND_ALL_MARKET_CANDLE_REPLY_FAILURE
-        Service->>Service: collectFail(taskId, message)
+        Service->>Service: collectFail(taskIdentifier, message)
 
         activate Service
         Service->>DB: BEGIN TRANSACTION
@@ -210,7 +210,7 @@ sequenceDiagram
 
     activate Listener
     loop 모든 파생 간격 (MIN_3 ~ MONTH)
-        Listener->>Service: calculateInterval(symbolId, interval, maxTime)
+        Listener->>Service: calculateInterval(symbolIdentifier, interval, maxTime)
 
         activate Service
         Service->>DB: BEGIN TRANSACTION
@@ -325,8 +325,8 @@ sequenceDiagram
     participant DB as Database
 
     alt 개별 일시정지
-        Client->>Controller: PUT /market-candle-collect-task/{taskId}/pause
-        Controller->>Service: pause(taskId)
+        Client->>Controller: PUT /market-candle-collect-task/{taskIdentifier}/pause
+        Controller->>Service: pause(taskIdentifier)
 
         activate Service
         Service->>DB: BEGIN TRANSACTION
@@ -340,8 +340,8 @@ sequenceDiagram
         Service-->>Controller: void
         Controller-->>Client: 204 No Content
     else 개별 재시작
-        Client->>Controller: PUT /market-candle-collect-task/{taskId}/resume
-        Controller->>Service: resume(taskId)
+        Client->>Controller: PUT /market-candle-collect-task/{taskIdentifier}/resume
+        Controller->>Service: resume(taskIdentifier)
 
         activate Service
         Service->>DB: BEGIN TRANSACTION
@@ -377,10 +377,10 @@ sequenceDiagram
     EventPub-->>Listener: @EventListener
 
     activate Listener
-    Listener->>TaskService: createOrUpdate(symbolId)
+    Listener->>TaskService: createOrUpdate(symbolIdentifier)
 
     activate TaskService
-    TaskService->>DB: SELECT tasks (symbolId)
+    TaskService->>DB: SELECT tasks (symbolIdentifier)
 
     loop 12개 간격 (MIN_1 ~ MONTH)
         alt 작업 이미 존재
@@ -413,10 +413,10 @@ sequenceDiagram
     EventPub-->>Listener: @EventListener
 
     activate Listener
-    Listener->>TaskService: delist(symbolId)
+    Listener->>TaskService: delist(symbolIdentifier)
 
     activate TaskService
-    TaskService->>DB: SELECT tasks (symbolId)
+    TaskService->>DB: SELECT tasks (symbolIdentifier)
 
     loop 모든 작업
         TaskService->>TaskService: task.delist()
@@ -626,21 +626,21 @@ sequenceDiagram
     participant Kafka as Kafka Producer
     participant Exchange as Exchange Service
 
-    Service->>PendingMap: put(taskId, CompletableFuture)
+    Service->>PendingMap: put(taskIdentifier, CompletableFuture)
     Service->>Kafka: FIND_ALL_MARKET_CANDLE_COMMAND
-    Note over Kafka: requestId: taskId
+    Note over Kafka: requestIdentifier: taskIdentifier
 
     alt Exchange Service 정상 응답
         Exchange-->>Kafka: FIND_ALL_MARKET_CANDLE_REPLY
         Kafka-->>Service: Reply 수신 (onReply)
-        Service->>PendingMap: complete(taskId, reply)
+        Service->>PendingMap: complete(taskIdentifier, reply)
         PendingMap-->>Service: CompletableFuture 완료
-        Service->>Service: collectMarketCandle(taskId, candles)
+        Service->>Service: collectMarketCandle(taskIdentifier, candles)
     else Exchange Service 타임아웃 (30초 초과)
         Note over PendingMap: orTimeout(30, SECONDS) 만료
         PendingMap->>Service: TimeoutException
-        Service->>PendingMap: remove(taskId)
-        Service->>Service: collectFail(taskId, "Exchange timeout after 30s")
+        Service->>PendingMap: remove(taskIdentifier)
+        Service->>Service: collectFail(taskIdentifier, "Exchange timeout after 30s")
         Note over Service: retryCount++, status = ERROR<br/>(자동 재시도 로직 진입)
     end
 ```
@@ -650,25 +650,25 @@ sequenceDiagram
 private val pendingRequests =
     ConcurrentHashMap<MarketCandleCollectTaskId, CompletableFuture<ExchangeReply>>()
 
-fun sendCollectCommand(taskId: MarketCandleCollectTaskId) {
+fun sendCollectCommand(taskIdentifier: MarketCandleCollectTaskId) {
     val future = CompletableFuture<ExchangeReply>()
         .orTimeout(30, TimeUnit.SECONDS)
         .whenComplete { reply, ex ->
-            pendingRequests.remove(taskId)
+            pendingRequests.remove(taskIdentifier)
             if (ex is TimeoutException) {
-                collectFail(taskId, "Exchange timeout after 30s")
+                collectFail(taskIdentifier, "Exchange timeout after 30s")
             } else if (ex != null) {
-                collectFail(taskId, ex.message ?: "Unknown error")
+                collectFail(taskIdentifier, ex.message ?: "Unknown error")
             }
             // 정상 응답은 onReply()에서 처리
         }
-    pendingRequests[taskId] = future
-    kafkaProducer.send(FIND_ALL_MARKET_CANDLE_COMMAND, taskId)
+    pendingRequests[taskIdentifier] = future
+    kafkaProducer.send(FIND_ALL_MARKET_CANDLE_COMMAND, taskIdentifier)
 }
 
 // Kafka Reply Listener
-fun onReply(taskId: MarketCandleCollectTaskId, reply: ExchangeReply) {
-    pendingRequests[taskId]?.complete(reply)
+fun onReply(taskIdentifier: MarketCandleCollectTaskId, reply: ExchangeReply) {
+    pendingRequests[taskIdentifier]?.complete(reply)
 }
 ```
 
@@ -708,7 +708,7 @@ spring:
 )
 ```
 
-**이유**: Kafka 파티션 키를 `symbolIdentifier`로 설정하면 동일 심볼 내 메시지 순서가 보장되므로, 심볼 간 병렬 처리가 가능함. 토픽 파티션 수는 concurrency 이상(≥ 5)으로 설정 필요
+**이유**: Kafka 파티션 키를 `symbolIdentifierentifier`로 설정하면 동일 심볼 내 메시지 순서가 보장되므로, 심볼 간 병렬 처리가 가능함. 토픽 파티션 수는 concurrency 이상(≥ 5)으로 설정 필요
 
 ---
 
@@ -729,17 +729,17 @@ spring:
 **적용 이유**: Task 상태 변경(DB)과 Kafka 발행이 동시에 발생하며,
 발행 실패 시 Task가 `COLLECTING` 상태에 고착되어 수집이 멈추는 치명적 문제가 생기기 때문.
 
-### 11.2 MarketOutboxEvent 엔티티
+### 11.2 OutboxEvent 엔티티
 
 ```kotlin
-class MarketOutboxEvent(
+class OutboxEvent(
     val id: UUID,
     val aggregateType: String,         // MarketCandleCollectTask
-    val aggregateId: String,           // Task UUID
+    val aggregateIdentifier: String,           // Task UUID
     val eventType: String,             // FIND_ALL_MARKET_CANDLE_COMMAND | MARKET_CANDLE_COLLECTED_EVENT
     val payload: String,               // JSON 직렬화 페이로드
-    val traceId: String?,              // 원본 요청 traceId (MDC에서 캡처)
-    val parentSpanId: String?,         // 원본 요청 spanId (MDC에서 캡처)
+    val traceIdentifier: String?,              // 원본 요청 traceId (MDC에서 캡처)
+    val parentSpanIdentifier: String?,         // 원본 요청 spanId (MDC에서 캡처)
     var status: OutboxStatus,          // PENDING | PUBLISHED | FAILED | DEAD
     var retryCount: Int = 0,           // Kafka 발행 실패 횟수 (MAX: 3)
     val createdAt: OffsetDateTime,
@@ -759,7 +759,7 @@ sequenceDiagram
     Note over Service: collectStart() 트랜잭션 내
     Service->>DB: BEGIN TRANSACTION
     Service->>DB: UPDATE tasks status = COLLECTING
-    Service->>DB: INSERT market_outbox (status=PENDING, traceId 포함)
+    Service->>DB: INSERT outbox (status=PENDING, traceId 포함)
     Service->>DB: COMMIT TRANSACTION
 
     Note over Relay: 폴링 (100ms) — 상세 로직은 outbox-pattern.md 참조
@@ -783,7 +783,7 @@ collectStart() 호출 (traceId: abc-123)
 
 ```sql
 -- 공통 스키마 템플릿은 outbox-pattern.md 참조. Market Service 전용 테이블:
-CREATE TABLE market_outbox (
+CREATE TABLE outbox (
     id               UUID    PRIMARY KEY,
     aggregate_type   VARCHAR NOT NULL,                    -- MarketCandleCollectTask
     aggregate_id     VARCHAR NOT NULL,                    -- Task UUID
@@ -797,10 +797,10 @@ CREATE TABLE market_outbox (
     published_at     TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX market_outbox_relay_idx ON market_outbox (status, retry_count, created_at)
+CREATE INDEX outbox_relay_idx ON outbox (status, retry_count, created_at)
     WHERE status IN ('PENDING', 'FAILED');
 
-CREATE INDEX market_outbox_dead_idx ON market_outbox (created_at)
+CREATE INDEX outbox_dead_idx ON outbox (created_at)
     WHERE status = 'DEAD';
 ```
 

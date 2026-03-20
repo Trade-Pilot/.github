@@ -95,8 +95,8 @@ fun findByIdForUpdate(@Param("id") id: UUID): MarketCandleCollectTask?
 
 // 사용
 @Transactional
-fun startCollect(taskId: CollectTaskId) {
-    val task = taskRepository.findByIdForUpdate(taskId.value)
+fun startCollect(taskIdentifier: CollectTaskId) {
+    val task = taskRepository.findByIdForUpdate(taskIdentifier.value)
         ?: throw CollectTaskNotFoundException()
 
     task.start()    // 상태 변경
@@ -182,7 +182,7 @@ fun relay() {
 예시:
   outbox:relay:market
   collect:symbol:KRW-BTC
-  virtual-trade:close-position:{accountId}
+  virtual-trade:close-position:{accountIdentifier}
 ```
 
 **적용 대상:**

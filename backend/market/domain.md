@@ -574,16 +574,69 @@ interface UpdateMarketCandleCollectTaskUseCase {
 
 수많은 심볼의 캔들을 효율적으로 수집하기 위해 **Consistency Hashing** 기반의 샤딩을 적용한다.
 
-- **샤딩 알고리즘**: `hash(symbolId) % totalWorkerCount`
+- **샤딩 알고리즘**: `hash(symbolIdentifier) % totalWorkerCount`
 - **동적 노드 관리**: Kubernetes Pod 리스트를 감시하여 `totalWorkerCount` 변화 시 샤딩을 재계산한다 (Rebalancing).
 - **작업 할당**:
   - 각 워커(Pod)는 자신의 `workerIndex`를 알고 있다.
   - 스케줄러 실행 시 `hash(task.symbolIdentifier) % totalWorkerCount == myWorkerIndex`인 태스크만 추출하여 실행한다.
   - 이 방식은 별도의 마스터 노드 없이도 각 워커가 독립적으로 자신의 할 일을 결정할 수 있게 한다.
 
+**구현 세부사항**:
+
+```kotlin
+@Component
+class WorkerShardingConfig(
+    @Value("\${worker.index:0}") val myWorkerIndex: Int,
+    private val kubernetesClient: KubernetesClient,
+) {
+    // Kubernetes StatefulSet ordinal 기반 자동 할당
+    // 환경 변수: WORKER_INDEX = ${HOSTNAME##*-} (예: market-service-2 → 2)
+
+    fun getTotalWorkerCount(): Int =
+        kubernetesClient.apps().statefulSets()
+            .withName("market-service")
+            .get()?.spec?.replicas ?: 1
+
+    fun isMyTask(symbolIdentifier: MarketSymbolId): Boolean =
+        abs(symbolIdentifier.value.hashCode()) % getTotalWorkerCount() == myWorkerIndex
+}
+```
+
+**스케줄러 적용**:
+```kotlin
+@Scheduled(fixedDelayString = "\${scheduler.market.candle-collect-interval:60000}")
+fun collectCandles() {
+    val allTasks = taskRepository.findAllCollectable()
+    val myTasks = allTasks.filter { shardingConfig.isMyTask(it.symbolIdentifier) }
+    myTasks.forEach { task -> collectCandle(task) }
+}
+```
+
+**병렬 수집**: 할당받은 태스크를 `CompletableFuture`로 최대 10개 동시 실행한다 (Upbit Public API Rate Limit 10 req/s 이내).
+
+```kotlin
+val executor = Executors.newFixedThreadPool(10)
+myTasks.map { task ->
+    CompletableFuture.runAsync({ collectCandle(task) }, executor)
+}.forEach { it.join() }
+```
+
 ---
 
 ## 11. 핵심 비즈니스 규칙
+
+### 11.0 "최신 캔들" 정의
+
+`GetRecentCandles(limit=1)`이 반환하는 캔들은 **가장 최근 종료된 캔들**이다.
+
+```
+MarketCandle.time = 캔들 시작 시각 (예: 13:59:00)
+MarketCandle.close = 해당 봉의 마지막 거래가 (13:59:59까지의 종가)
+```
+
+- 현재 진행 중인 캔들(아직 종료되지 않은 봉)은 **반환하지 않는다**.
+- 따라서 `GetRecentCandles(limit=1).close`를 현재가로 사용하면, 실제 최신 가격과 최대 1분(MIN_1 기준)의 차이가 발생할 수 있다.
+- VirtualTrade / Trade 스케줄러가 이 값을 `currentPrice`로 사용할 때 이 지연을 인지해야 한다.
 
 ### 11.1 Flat Candle 생성 규칙
 - 이전 종가가 있는 경우에만 생성
@@ -659,7 +712,7 @@ service MarketCandle {
 // 최근 캔들 조회
 message GetRecentCandlesRequest {
   string symbol_id = 1;  // UUID
-  string interval  = 2;  // MIN_1, MIN_5, HOUR_1, DAY 등
+  string interval  = 2;  // MIN_1, MIN_5, MIN_60, DAY 등 (MarketCandleInterval enum 값)
   int32  limit     = 3;  // 최대 1000개
 }
 
@@ -670,7 +723,7 @@ message GetRecentCandlesResponse {
 // 과거 캔들 조회 (기간 기반)
 message GetHistoricalCandlesRequest {
   string symbol_id = 1;  // UUID
-  string interval  = 2;  // MIN_1, MIN_5, HOUR_1, DAY 등
+  string interval  = 2;  // MIN_1, MIN_5, MIN_60, DAY 등 (MarketCandleInterval enum 값)
   string from      = 3;  // ISO-8601 (예: 2024-01-01T00:00:00Z)
   string to        = 4;  // ISO-8601
 }
@@ -776,11 +829,11 @@ ListSymbols:            10초
 
 **캐싱 전략**:
 - `GetSymbol`: Redis 캐싱 (TTL 10분)
-  - Key: `symbol:{symbolId}`
+  - Key: `symbol:{symbolIdentifier}`
   - Value: `SymbolProto` JSON
 
 - `GetRecentCandles`: 최신 캔들(limit=1)만 Redis 캐싱 (TTL 10초)
-  - Key: `candle:recent:{symbolId}:{interval}`
+  - Key: `candle:recent:{symbolIdentifier}:{interval}`
   - 이유: 현재가 조회 용도로 자주 호출됨
 
 **페이징**:
@@ -798,12 +851,12 @@ class MarketCandleGrpcAdapter(
 ) : FindMarketCandleOutput {
 
     override fun getRecentCandles(
-        symbolId: UUID,
+        symbolIdentifier: UUID,
         interval: CandleInterval,
         limit: Int,
     ): List<CandleData> {
         val request = GetRecentCandlesRequest.newBuilder()
-            .setSymbolId(symbolId.toString())
+            .setSymbolId(symbolIdentifier.toString())
             .setInterval(interval.name)
             .setLimit(limit)
             .build()
@@ -817,7 +870,7 @@ class MarketCandleGrpcAdapter(
         } catch (e: StatusRuntimeException) {
             when (e.status.code) {
                 Status.Code.NOT_FOUND -> emptyList()
-                Status.Code.DEADLINE_EXCEEDED -> throw CandleDataUnavailableException(symbolId)
+                Status.Code.DEADLINE_EXCEEDED -> throw CandleDataUnavailableException(symbolIdentifier)
                 else -> throw MarketServiceUnavailableException(e)
             }
         }
@@ -843,7 +896,7 @@ class MarketSymbolGrpcAdapter(
 
         // gRPC 호출
         val request = GetSymbolRequest.newBuilder()
-            .setSymbolId(symbolId.toString())
+            .setSymbolId(symbolIdentifier.toString())
             .build()
 
         return try {
@@ -913,15 +966,15 @@ class InternalApiKeyInterceptor : ServerInterceptor {
 ```kotlin
 // domain/port/in/
 interface GetSymbolMetadataUseCase {
-    fun getSymbol(symbolId: MarketSymbolId): MarketSymbol?
-    fun getSymbols(symbolIds: List<MarketSymbolId>): List<MarketSymbol>
+    fun getSymbol(symbolIdentifier: MarketSymbolId): MarketSymbol?
+    fun getSymbols(symbolIdentifiers: List<MarketSymbolId>): List<MarketSymbol>
     fun listSymbols(market: MarketType, status: MarketSymbolStatus?, pageable: Pageable): Page<MarketSymbol>
 }
 
 // domain/port/out/
 interface FindSymbolOutput {
-    fun findById(symbolId: MarketSymbolId): MarketSymbol?
-    fun findAllByIds(symbolIds: List<MarketSymbolId>): List<MarketSymbol>
+    fun findById(symbolIdentifier: MarketSymbolId): MarketSymbol?
+    fun findAllByIds(symbolIdentifiers: List<MarketSymbolId>): List<MarketSymbol>
     fun findAllByMarketAndStatus(
         market: MarketType,
         status: MarketSymbolStatus?,

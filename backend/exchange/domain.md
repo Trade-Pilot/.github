@@ -52,11 +52,12 @@ application/
 infrastructure/
   kafka/         SymbolQueryCommandConsumer    (command.exchange.market.find-all-symbol 구독)
                  CandleQueryCommandConsumer    (command.exchange.market.find-all-candle 구독)
-                 OrderSubmitCommandConsumer    (command.exchange.submit-order 구독)
-                 OrderCancelCommandConsumer    (command.exchange.cancel-order 구독)
+                 OrderSubmitCommandConsumer    (command.exchange.trade.submit-order 구독)
+                 OrderCancelCommandConsumer    (command.exchange.trade.cancel-order 구독)
                  SymbolReplyProducer           (implements PublishSymbolReplyOutput)
                  CandleReplyProducer           (implements PublishCandleReplyOutput)
                  OrderStatusEventProducer      (implements PublishOrderStatusOutput)
+                 UserWithdrawnEventConsumer    (trade-pilot.userservice.user 구독 → ExchangeAccount REVOKED)
   upbit/         UpbitPublicApiAdapter         (implements UpbitPublicApiOutput)
                  UpbitPrivateApiAdapter        (implements UpbitPrivateApiOutput)
   crypto/        ApiKeyCryptoService           (AES-256-GCM 암복호화)
@@ -71,8 +72,8 @@ infrastructure/
 
 ```
 ExchangeAccount (Aggregate Root)
-├── accountId          : UUID
-├── userId             : UUID
+├── accountIdentifier          : UUID
+├── userIdentifier             : UUID
 ├── exchange           : ExchangeType       -- UPBIT | BINANCE (현재: UPBIT만)
 ├── encryptedAccessKey : String             -- AES-256-GCM 암호화된 Access Key
 ├── encryptedSecretKey : String             -- AES-256-GCM 암호화된 Secret Key
@@ -116,16 +117,37 @@ class ApiKeyCryptoService(
         return Base64.getEncoder().encodeToString(iv + encrypted)
     }
 
-    fun decrypt(ciphertext: String): String {
+    /**
+     * API Key를 CharArray로 복호화한다.
+     * 사용 후 반드시 Arrays.fill(result, '\0')으로 메모리에서 폐기해야 한다.
+     * String은 immutable이라 GC 전까지 힙에 잔류하므로, 민감 데이터는 CharArray로 취급한다.
+     */
+    fun decrypt(ciphertext: String): CharArray {
         val data = Base64.getDecoder().decode(ciphertext)
         val iv = data.copyOfRange(0, 12)
         val encrypted = data.copyOfRange(12, data.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
-        return String(cipher.doFinal(encrypted), Charsets.UTF_8)
+        val decrypted = cipher.doFinal(encrypted)
+        val result = String(decrypted, Charsets.UTF_8).toCharArray()
+        Arrays.fill(decrypted, 0)  // 중간 ByteArray 즉시 폐기
+        return result
     }
 }
 ```
+
+**사용 패턴**:
+```kotlin
+val apiKey = cryptoService.decrypt(account.encryptedAccessKey)
+try {
+    upbitApi.call(apiKey)
+} finally {
+    Arrays.fill(apiKey, '\0')  // API 호출 완료 후 즉시 메모리 폐기
+}
+```
+
+> JVM Heap Dump 분석으로 API Key가 노출되는 것을 방지한다.
+> String 대신 CharArray를 사용하면 사용 후 명시적으로 제로화할 수 있다.
 
 > 암호화 키(`crypto.aes.key`)는 Kubernetes Secret으로 주입한다. 코드·설정 파일에 평문으로 포함하지 않는다.
 
@@ -187,7 +209,7 @@ Rate Limit 초과(`RequestNotPermitted`) 시 즉시 실패 처리하고, reply-f
 // command.exchange.market.find-all-symbol
 
 data class FindAllMarketSymbolCommand(
-    val requestId : UUID,
+    val requestIdentifier : UUID,
     val market    : String,   // "KRW"
 ) : CommandBaseMessage
 
@@ -195,7 +217,7 @@ data class FindAllMarketSymbolCommand(
 // reply.market.exchange.find-all-symbol
 
 data class FindAllMarketSymbolReply(
-    val requestId : UUID,
+    val requestIdentifier : UUID,
     val symbols   : List<SymbolDto>,
 ) : CommandBaseMessage
 
@@ -213,7 +235,7 @@ data class SymbolDto(
 // command.exchange.market.find-all-candle
 
 data class FindAllMarketCandleCommand(
-    val requestId : UUID,
+    val requestIdentifier : UUID,
     val market    : String,     // "KRW-BTC"
     val interval  : String,     // "minutes", "days" 등 업비트 규격
     val count     : Int,        // 최대 200
@@ -224,7 +246,7 @@ data class FindAllMarketCandleCommand(
 // reply.market.exchange.find-all-candle
 
 data class FindAllMarketCandleReply(
-    val requestId : UUID,
+    val requestIdentifier : UUID,
     val candles   : List<CandleDto>,
 ) : CommandBaseMessage
 
@@ -232,7 +254,7 @@ data class FindAllMarketCandleReply(
 // reply-failure.market.exchange.find-all-candle
 
 data class FindAllMarketCandleReplyFailure(
-    val requestId : UUID,
+    val requestIdentifier : UUID,
     val errorCode : String,
     val message   : String,
 ) : CommandBaseMessage
@@ -242,12 +264,12 @@ data class FindAllMarketCandleReplyFailure(
 
 ```kotlin
 // 구독 토픽
-// command.exchange.submit-order
+// command.exchange.trade.submit-order
 
 data class SubmitOrderCommand(
-    val orderId           : UUID,
-    val exchangeAccountId : UUID,
-    val symbolId          : UUID,
+    val orderIdentifier           : UUID,
+    val exchangeAccountIdentifier : UUID,
+    val symbolIdentifier          : UUID,
     val side              : OrderSide,
     val type              : OrderType,
     val quantity          : BigDecimal,
@@ -257,7 +279,7 @@ data class SubmitOrderCommand(
 
 **처리 흐름:**
 ```
-1. ExchangeAccount 조회 (exchangeAccountId 기준, ACTIVE 검증)
+1. ExchangeAccount 조회 (exchangeAccountIdentifier 기준, ACTIVE 검증)
 2. API Key 복호화
 3. Private API Rate Limiter 획득 (초과 시 ORDER_STATUS 이벤트로 REJECTED 발행)
 4. 업비트 POST /v1/orders 호출
@@ -269,17 +291,18 @@ data class SubmitOrderCommand(
 
 ```kotlin
 // 구독 토픽
-// command.exchange.cancel-order
+// command.exchange.trade.cancel-order
 
 data class CancelOrderCommand(
-    val orderId         : UUID,
-    val exchangeOrderId : String,
+    val orderIdentifier            : UUID,
+    val exchangeAccountIdentifier  : UUID,        // API Key 조회에 필요
+    val exchangeOrderId    : String,
 ) : CommandBaseMessage
 ```
 
 **처리 흐름:**
 ```
-1. ExchangeAccount 조회 (exchangeOrderId 기반 매핑 또는 orderId로 조회)
+1. ExchangeAccount 조회 (exchangeAccountIdentifier 기준, ACTIVE 검증)
 2. API Key 복호화
 3. Private API Rate Limiter 획득
 4. 업비트 DELETE /v1/orders?identifier={exchangeOrderId} 호출
@@ -294,7 +317,7 @@ data class CancelOrderCommand(
 // event.exchange.order-status
 
 data class OrderStatusEvent(
-    val orderId         : UUID,
+    val orderIdentifier         : UUID,
     val exchangeOrderId : String?,
     val status          : ExchangeOrderStatus,
     val filledQuantity  : BigDecimal,
@@ -373,3 +396,16 @@ CREATE UNIQUE INDEX idx_ea_user_exchange_active
 | `EX006` | `DUPLICATE_ACTIVE_ACCOUNT` | 해당 거래소 활성 계정 이미 존재 |
 | `EX007` | `ORDER_SUBMIT_FAILED` | 주문 제출 실패 (거래소 거부) |
 | `EX008` | `ORDER_CANCEL_FAILED` | 주문 취소 실패 |
+
+---
+
+## 9. Event 수신 — UserWithdrawnEvent
+
+```
+구독 토픽 : trade-pilot.userservice.user  (eventType: "user-withdrawn")
+처리      : userIdentifier에 속한 모든 ExchangeAccount → REVOKED 처리
+보존      : 감사 목적으로 레코드 보존 (status=REVOKED, 복호화 불가 상태)
+```
+
+> 회원 탈퇴 시 암호화된 API Key가 활성 상태로 남아있으면 보안 리스크다.
+> REVOKED 상태의 계정은 주문 제출/취소 요청 시 즉시 거부된다.

@@ -35,7 +35,7 @@ sequenceDiagram
         US->>DB: INSERT user (status = ACTIVE)
         US->>DB: COMMIT
 
-        US-->>GW: 201 Created (userId)
+        US-->>GW: 201 Created (userIdentifier)
         GW-->>Client: 201 Created
     end
     deactivate US
@@ -76,7 +76,7 @@ sequenceDiagram
                 GW-->>Client: 403 Forbidden
             else ACTIVE
                 US->>US: JWT AccessToken 생성 (RS256, 15분)
-                US->>US: RefreshTokenFactory.create(userId, jti=UUID)
+                US->>US: RefreshTokenFactory.create(userIdentifier, jti=UUID)
 
                 US->>DB: BEGIN TRANSACTION
                 US->>DB: INSERT refresh_token (SHA-256 hash)
@@ -122,7 +122,7 @@ sequenceDiagram
             US-->>GW: 401 REFRESH_TOKEN_EXPIRED or REVOKED
             GW-->>Client: 401 Unauthorized
         else 유효
-            US->>DB: SELECT user WHERE identifier = token.userIdentifier
+            US->>DB: SELECT user WHERE identifier = token.userIdentifierentifier
             Note over US: 탈퇴/정지 여부 재확인
 
             US->>DB: BEGIN TRANSACTION
@@ -163,7 +163,7 @@ sequenceDiagram
 
 > `SELECT FOR UPDATE` 없이 낙관적 접근.
 > 두 번째 요청은 `isRevoked = true`로 거부된다.
-> 탈취 감지 시 해당 userId의 전체 RefreshToken을 revoke 처리하는 것을 권장한다.
+> 탈취 감지 시 해당 userIdentifier의 전체 RefreshToken을 revoke 처리하는 것을 권장한다.
 
 ---
 
@@ -214,10 +214,10 @@ sequenceDiagram
     Note over Client: Body: password (비밀번호 재확인)
     Note over GW: JWT 검증 → X-User-Id 헤더
 
-    GW->>US: WithdrawCommand(userId, password)
+    GW->>US: WithdrawCommand(userIdentifier, password)
 
     activate US
-    US->>DB: SELECT user WHERE identifier = userId
+    US->>DB: SELECT user WHERE identifier = userIdentifier
 
     US->>US: bcrypt.verify(password, user.passwordHash)
     alt 비밀번호 불일치
@@ -233,7 +233,7 @@ sequenceDiagram
         US->>DB: UPDATE user SET status = WITHDRAWN
 
         US->>DB: UPDATE refresh_token SET is_revoked = true
-        Note over DB: WHERE user_identifier = userId
+        Note over DB: WHERE user_identifier = userIdentifier
 
         US->>US: OutboxEventFactory.create(UserWithdrawnEvent)
         Note over US: traceId 캡처 (MDC)
@@ -250,7 +250,7 @@ sequenceDiagram
     Note over Relay: Outbox 폴링 (100ms)
     Relay->>DB: SELECT outbox WHERE status = PENDING
     Relay->>Kafka: USER_WITHDRAWN_EVENT_TOPIC
-    Note over Kafka: userId, withdrawnAt
+    Note over Kafka: userIdentifier, withdrawnAt
     Relay->>DB: UPDATE status = PUBLISHED
 ```
 
@@ -265,7 +265,7 @@ sequenceDiagram
     participant GW as API Gateway
     participant US as User Service
 
-    Note over GW: 서버 시작 시 또는 캐시 만료 시 (1시간)
+    Note over GW: 서버 시작 시 또는 캐시 만료 시 (10분)
 
     GW->>US: GET /auth/.well-known/jwks.json
     Note over GW: 인증 불필요 (public endpoint)

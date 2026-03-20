@@ -241,7 +241,7 @@ enum class NotificationStatus {
 ```kotlin
 // 각 서비스가 Notification 발행 시 사용하는 커맨드
 data class SendNotificationCommand(
-    val userId: UserId,
+    val userIdentifier: UserId,
     val eventType: String,                      // 이벤트 타입 식별자 (자유 문자열)
     val variables: Map<String, String>,         // 템플릿 변수 (모든 값은 String)
 )
@@ -270,11 +270,11 @@ data class OrderFilledNotificationVariables(
 
 // 발행
 val command = SendNotificationCommand(
-    userId    = userId,
+    userIdentifier = userIdentifier,
     eventType = "VIRTUAL_ORDER_FILLED",
     variables = OrderFilledNotificationVariables(symbol, side, qty, price).toVariables(),
 )
-kafkaTemplate.send(NOTIFICATION_COMMAND_TOPIC, userId.value.toString(), command)
+kafkaTemplate.send(NOTIFICATION_COMMAND_TOPIC, userIdentifier.value.toString(), command)
 ```
 
 **주요 이벤트 타입 및 변수 목록:**
@@ -309,7 +309,7 @@ kafkaTemplate.send(NOTIFICATION_COMMAND_TOPIC, userId.value.toString(), command)
 ```kotlin
 interface NotificationDispatcher {
     fun dispatch(
-        userId: UserId,
+        userIdentifier: UserId,
         eventType: String,
         variables: Map<String, String>,
     )
@@ -317,7 +317,7 @@ interface NotificationDispatcher {
 ```
 
 **알고리즘**:
-1. `NotificationPreference` 조회 (`userId` + `eventType`, `isEnabled == true`, `isDeleted == false`)
+1. `NotificationPreference` 조회 (`userIdentifier` + `eventType`, `isEnabled == true`, `isDeleted == false`)
    - Preference가 없으면 → 발송 스킵
 2. 설정된 채널 목록의 `NotificationChannel` 조회 (`isActive == true`, `isDeleted == false`)
 3. 채널 타입에 맞는 `NotificationTemplate` 조회 → 변수 치환으로 `NotificationMessage` 생성
@@ -383,10 +383,10 @@ class UserWithdrawnEventHandler(
     private val preferenceRepository: NotificationPreferenceRepository,
 ) {
     fun handle(event: UserWithdrawnEvent) {
-        val userId = UserId.of(event.userId)
+        val userIdentifier = UserId.of(event.userId)
         // 소프트 딜리트 — 감사 목적으로 데이터 보존, 발송 대상에서만 제외
-        channelRepository.softDeleteAllByUserId(userId)
-        preferenceRepository.softDeleteAllByUserId(userId)
+        channelRepository.softDeleteAllByUserId(userIdentifier)
+        preferenceRepository.softDeleteAllByUserId(userIdentifier)
         // NotificationLog는 삭제하지 않음 (감사 목적)
     }
 }
@@ -399,9 +399,9 @@ class UserWithdrawnEventHandler(
 사용자가 명시적으로 opt-in한 이벤트에만 알림을 발송한다 (기본 off).
 
 ```kotlin
-fun getOrCreate(userId: UserId, eventType: String): NotificationPreference =
-    preferenceRepository.findByUserIdAndEventType(userId, eventType)
-        ?: NotificationPreferenceFactory.create(userId, eventType)
+fun getOrCreate(userIdentifier: UserId, eventType: String): NotificationPreference =
+    preferenceRepository.findByUserIdAndEventType(userIdentifier, eventType)
+        ?: NotificationPreferenceFactory.create(userIdentifier, eventType)
 ```
 
 ---
@@ -416,12 +416,12 @@ sequenceDiagram
     participant Discord as Discord Webhook
 
     VT->>Kafka: NOTIFICATION_COMMAND_TOPIC
-    Note over Kafka: userId, eventType=VIRTUAL_ORDER_FILLED, variables
+    Note over Kafka: userIdentifier, eventType=VIRTUAL_ORDER_FILLED, variables
 
     Kafka-->>NS: Consume Command
 
     activate NS
-    NS->>NS: preference 조회 (userId + eventType)
+    NS->>NS: preference 조회 (userIdentifier + eventType)
 
     NS->>NS: template 조회 (eventType + channelType)
     NS->>NS: render(template, variables)
@@ -439,45 +439,45 @@ sequenceDiagram
 ```kotlin
 // 채널 관리
 interface CreateNotificationChannelUseCase {
-    fun create(userId: UserId, command: CreateChannelCommand): NotificationChannelId
+    fun create(userIdentifier: UserId, command: CreateChannelCommand): NotificationChannelId
 }
 
 interface UpdateNotificationChannelUseCase {
-    fun activate(channelId: NotificationChannelId, userId: UserId)
-    fun deactivate(channelId: NotificationChannelId, userId: UserId)
-    fun updateConfig(channelId: NotificationChannelId, userId: UserId, config: ChannelConfig)
+    fun activate(channelIdentifier: NotificationChannelId, userIdentifier: UserId)
+    fun deactivate(channelIdentifier: NotificationChannelId, userIdentifier: UserId)
+    fun updateConfig(channelIdentifier: NotificationChannelId, userIdentifier: UserId, config: ChannelConfig)
 }
 
 interface DeleteNotificationChannelUseCase {
-    fun delete(channelId: NotificationChannelId, userId: UserId)   // 소프트 딜리트
+    fun delete(channelIdentifier: NotificationChannelId, userIdentifier: UserId)   // 소프트 딜리트
 }
 
 interface GetNotificationChannelUseCase {
-    fun getChannels(userId: UserId): List<NotificationChannel>
+    fun getChannels(userIdentifier: UserId): List<NotificationChannel>
 }
 
 // 수신 설정 관리
 interface UpdateNotificationPreferenceUseCase {
     fun updatePreference(
-        userId: UserId,
+        userIdentifier: UserId,
         eventType: String,
         command: UpdatePreferenceCommand,
     )
 }
 
 interface GetNotificationPreferenceUseCase {
-    fun getPreferences(userId: UserId): List<NotificationPreferenceResponse>
+    fun getPreferences(userIdentifier: UserId): List<NotificationPreferenceResponse>
 }
 
 // 발송 이력
 interface GetNotificationLogUseCase {
-    fun getLogs(userId: UserId, pageable: Pageable): Page<NotificationLog>
+    fun getLogs(userIdentifier: UserId, pageable: Pageable): Page<NotificationLog>
 }
 
 // 템플릿 관리 (ADMIN)
 interface ManageNotificationTemplateUseCase {
     fun createTemplate(command: CreateTemplateCommand): NotificationTemplateId
-    fun updateTemplate(templateId: NotificationTemplateId, command: UpdateTemplateCommand)
+    fun updateTemplate(templateIdentifier: NotificationTemplateId, command: UpdateTemplateCommand)
     fun getTemplates(): List<NotificationTemplate>
 }
 ```
@@ -494,10 +494,10 @@ POST /notification-channels
 GET /notification-channels
 → 내 채널 목록 조회 (isDeleted=false 필터)
 
-PUT /notification-channels/{channelId}/activate
-PUT /notification-channels/{channelId}/deactivate
+PUT /notification-channels/{channelIdentifier}/activate
+PUT /notification-channels/{channelIdentifier}/deactivate
 
-DELETE /notification-channels/{channelId}
+DELETE /notification-channels/{channelIdentifier}
 → 채널 소프트 딜리트
 
 # 수신 설정
@@ -515,7 +515,7 @@ GET /notification-logs?from=2024-01-01&to=2024-12-31
 # 템플릿 관리 (ADMIN)
 GET  /notification-templates
 POST /notification-templates
-PUT  /notification-templates/{templateId}
+PUT  /notification-templates/{templateIdentifier}
 ```
 
 ---

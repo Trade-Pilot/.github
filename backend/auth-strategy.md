@@ -34,7 +34,7 @@ Client (HTTPS)
     │ EndpointPermission 평가 (Redis 캐시)
     │ X-User-Id / X-User-Role 헤더 추가
     │ X-Request-Id / X-Global-Trace-Id 헤더 추가
-    │ Rate Limit (IP / userId 기반)
+    │ Rate Limit (IP / userIdentifier 기반)
     ▼
 [ 내부 서비스들 (HTTP, 클러스터 내부망) ]
 ```
@@ -81,9 +81,40 @@ class JwksCache(
 | 캐시 방식 | 인메모리 `ConcurrentHashMap` (Gateway 인스턴스 로컬) |
 | TTL | 10분 (`@Scheduled` 주기 갱신) |
 | 최초 로딩 | `@PostConstruct` 또는 첫 요청 시 동기 로딩 |
-| 키 교체 시 | `kid` 불일치 → User Service 즉시 재조회 + 캐시 갱신 |
+| 키 교체 시 | `kid` 불일치 → Rate Limit 적용 후 재조회 + 캐시 갱신 |
 
 > Gateway Pod가 재시작되면 첫 요청 전에 JWKS를 로딩한다. `@PostConstruct`로 시작 시 즉시 로딩해 Cold Start 지연을 방지한다.
+
+### 알려지지 않은 kid 공격 방어
+
+공격자가 조작된 JWT의 `kid`를 무작위 값으로 설정하면, Gateway가 매 요청마다 User Service에
+JWKS 재조회를 시도하여 DoS 공격이 가능하다. 이를 방지하기 위해:
+
+```kotlin
+private val unknownKidCache = ConcurrentHashMap<String, Long>()  // kid → 최초 거부 시각
+private val UNKNOWN_KID_TTL = 60_000L  // 1분간 동일 kid 재조회 차단
+
+private fun refreshAndGetWithRateLimit(kid: String): RSAPublicKey? {
+    val now = System.currentTimeMillis()
+
+    // 최근 1분 내 거부된 kid → 즉시 null 반환 (재조회 안 함)
+    unknownKidCache[kid]?.let { rejectedAt ->
+        if (now - rejectedAt < UNKNOWN_KID_TTL) return null
+    }
+
+    // User Service JWKS 재조회
+    jwksCache.refresh()
+    val key = jwksCache.getKey(kid)
+
+    if (key == null) {
+        unknownKidCache[kid] = now  // 거부 캐시에 등록
+    }
+    return key
+}
+```
+
+> `unknownKidCache`는 TTL 1분 후 자동 만료되므로, 실제 키 로테이션 시에는
+> 최대 1분 후 정상 인식된다.
 
 ---
 
@@ -104,7 +135,7 @@ class JwtAuthenticationFilter(
             val kid     = header["kid"] as? String
                 ?: return@GatewayFilter unauthorizedResponse(exchange, "Missing kid")
             val pubKey  = jwksCache.getKey(kid)
-                ?: refreshAndGet(kid)                    // kid 불일치 시 즉시 재조회
+                ?: refreshAndGetWithRateLimit(kid)       // kid 불일치 시 Rate Limit 적용 후 재조회
                 ?: return@GatewayFilter unauthorizedResponse(exchange, "Unknown kid")
 
             val claims = Jwts.parserBuilder()
@@ -113,11 +144,11 @@ class JwtAuthenticationFilter(
                 .parseClaimsJws(token)
                 .body
 
-            val userId = claims.subject
+            val userIdentifier = claims.subject
             val role   = claims["role"] as? String ?: "USER"
 
             val mutated = request.mutate()
-                .header("X-User-Id",   userId)
+                .header("X-User-Id",   userIdentifier)
                 .header("X-User-Role", role)
                 .build()
 
@@ -146,7 +177,7 @@ PUBLIC 엔드포인트 (/auth/sign-up, /auth/sign-in 등)
   └── IP 기반 Rate Limit: 20 req/min per IP
 
 USER 엔드포인트
-  └── userId 기반 Rate Limit: 300 req/min per userId
+  └── userIdentifier 기반 Rate Limit: 300 req/min per userIdentifier
 
 ADMIN 엔드포인트
   └── Rate Limit 없음 (내부 운영 도구)
@@ -175,9 +206,9 @@ spring:
 ```kotlin
 @Bean
 fun userKeyResolver(): KeyResolver = KeyResolver { exchange ->
-    val userId = exchange.request.headers.getFirst("X-User-Id")
+    val userIdentifier = exchange.request.headers.getFirst("X-User-Id")
     val ip     = exchange.request.remoteAddress?.address?.hostAddress ?: "unknown"
-    Mono.just(userId ?: "ip:$ip")
+    Mono.just(userIdentifier ?: "ip:$ip")
 }
 ```
 

@@ -173,26 +173,58 @@ data class ApiErrorResponse(
 - **JWT 검증**: Gateway에서 JWT 검증 후 `X-User-Id` 헤더 주입
 - **공통 에러 응답**: `ApiErrorResponse` 포맷 통일
 
+### 5.4 탈퇴 사용자 요청 차단
+
+회원 탈퇴(`UserWithdrawnEvent`) 후 각 서비스의 비동기 정리가 완료되기 전에
+탈퇴 사용자의 JWT가 유효한 상태로 API 요청이 도달할 수 있다.
+
+**Gateway 레벨 차단**:
+- User Service가 `WITHDRAWN` 상태를 반환하면 Gateway에서 `403 ACCOUNT_WITHDRAWN` 반환
+- JWT 만료(15분) 전까지는 Gateway가 직접 차단할 수 없으므로, **각 서비스에서도 방어**
+
+**서비스 레벨 방어**:
+- 쓰기 작업(POST/PUT/DELETE) 수행 전에 `X-User-Id`로 User Service에 상태 확인하거나,
+  로컬 `processed_events` 테이블에서 `UserWithdrawnEvent` 수신 여부를 확인
+- 읽기 작업(GET)은 탈퇴 후에도 일시적으로 허용 (데이터가 soft delete 되기 전까지)
+
+> 탈퇴 후 최대 15분(JWT 만료) + 수초(이벤트 전파) 동안 요청이 도달할 수 있다.
+> 이 간극은 JWT 만료 시간을 줄이거나, Gateway에 실시간 블랙리스트(Redis)를 추가하여 단축할 수 있다.
+
 ---
 
 ## 6. Kafka 토픽 명명 규칙 및 메시지 표준
 
 ### 6.1 토픽 명명 규칙
 
-**패턴**: `{메시지타입}.{목적지서비스}.{발신지서비스}.{액션}`
+**패턴**:
 
-**메시지 타입**:
-- `command`: 요청-응답 패턴 (Command/Reply)
-- `reply`: Command에 대한 응답
-- `reply-failure`: Command 실패 응답
-- `event`: 단방향 이벤트 (발행 후 잊기)
+| 메시지 타입 | 패턴 | 설명 |
+|------------|------|------|
+| `command` | `command.{수신자}.{발신자}.{액션}` | 요청 전달 — 수신자가 처리 |
+| `reply` | `reply.{수신자}.{발신자}.{액션}` | 응답 전달 — command의 발신자가 수신 |
+| `reply-failure` | `reply-failure.{수신자}.{발신자}.{액션}` | 실패 응답 |
+| `event` | `event.{발행자}.{액션}` | 단방향 이벤트 (발행 후 잊기) |
+
+> **핵심**: `command`의 발신자가 `reply`의 수신자가 된다.
+> 예: VirtualTrade → Agent로 command 발행 시, reply는 Agent → VirtualTrade로 돌아온다.
 
 **예시**:
 ```
+# Command: VirtualTrade(발신) → Agent(수신)
 command.agent.virtual-trade.analyze-strategy
-reply.agent.virtual-trade.analyze-strategy
+
+# Reply: Agent(발신) → VirtualTrade(수신) — command의 발신/수신이 뒤바뀜
+reply.virtual-trade.agent.analyze-strategy
+
+# Event: 발행자만 명시
 event.virtual-trade.execution
 event.agent.agent-terminated
+
+# Exchange Service
+command.exchange.market.find-all-symbol       # Market(발신) → Exchange(수신)
+reply.market.exchange.find-all-symbol         # Exchange(발신) → Market(수신)
+command.exchange.trade.submit-order           # Trade(발신) → Exchange(수신)
+command.exchange.trade.cancel-order
 
 # 도메인 이벤트 (CDC 스타일)
 trade-pilot.agentservice.agent       (eventType: agent-terminated)
@@ -210,9 +242,9 @@ trade-pilot.notification.command     (NOTIFICATION_COMMAND_TOPIC)
 
 ```kotlin
 data class KafkaEnvelope<T>(
-    val messageId: UUID,              // 메시지 고유 ID (멱등성 보장)
+    val messageIdentifier: UUID,      // 메시지 고유 ID (멱등성 보장)
     val timestamp: OffsetDateTime,
-    val traceId: String,              // 분산 추적용
+    val traceIdentifier: String,      // 분산 추적용
     val callback: String?,            // Reply 토픽 (Command 전용)
     val payload: T,                   // 실제 메시지
 )
@@ -223,9 +255,9 @@ data class KafkaEnvelope<T>(
 ```kotlin
 // Command 발행 시 callback 지정
 KafkaEnvelope(
-    messageId = UUID.randomUUID(),
+    messageIdentifier = UUID.randomUUID(),
     timestamp = now,
-    traceId = currentTraceId,
+    traceIdentifier = currentTraceId,
     callback = "reply.agent.virtual-trade.analyze-strategy",
     payload = AnalyzeAgentCommand(...)
 )
@@ -340,11 +372,11 @@ DEBUG: 디버깅 정보 (프로덕션에서 비활성화)
 {
   "timestamp": "2024-01-01T12:00:00Z",
   "level": "INFO",
-  "traceId": "abc123",
+  "traceIdentifier": "abc123",
   "service": "agent-service",
   "message": "Signal generated",
-  "userId": "uuid",
-  "agentId": "uuid",
+  "userIdentifier": "uuid",
+  "agentIdentifier": "uuid",
   "signalType": "BUY"
 }
 ```
@@ -356,17 +388,29 @@ DEBUG: 디버깅 정보 (프로덕션에서 비활성화)
 **P0 (Critical - 즉시 대응)**:
 - 서비스 Health Check 실패 (5분 이상)
 - DB 연결 끊김
-- Kafka Consumer Lag > 10,000
+- DLQ 메시지 발생 (어떤 서비스든)
+- Kafka Consumer Lag 서비스별 임계값 초과:
+
+| 서비스 | P0 Lag | P1 Lag | 근거 |
+|--------|--------|--------|------|
+| Trade Service | > 5,000 | > 1,000 | 실거래 지연은 직접적 손실 |
+| Agent Service | > 3,000 | > 500 | 신호 생성 지연 → 체결 타이밍 이탈 |
+| VirtualTrade Service | > 5,000 | > 1,000 | 가상거래 지연은 학습 데이터 왜곡 |
+| Exchange Service | > 3,000 | > 500 | 주문 제출 지연 → 가격 이탈 |
+| Market Service | > 10,000 | > 3,000 | 수집 지연은 허용 범위 넓음 |
+| Notification Service | > 30,000 | > 10,000 | 알림 지연은 심각도 낮음 |
 
 **P1 (High - 30분 내 대응)**:
 - API 에러율 > 5%
 - 주문 제출 실패율 > 10%
 - 캔들 수집 실패 연속 3회 이상
+- 미체결 LIMIT 주문 3개 이상 && 각 1시간 이상 대기
 
 **P2 (Medium - 업무시간 내 대응)**:
 - 디스크 사용률 > 80%
 - Memory 사용률 > 85%
 - Portfolio Reconciliation 불일치
+- Account Reconciliation 불일치
 
 ---
 
@@ -379,6 +423,30 @@ DEBUG: 디버깅 정보 (프로덕션에서 비활성화)
 재시도 횟수: 3회
 백오프: 지수 백오프 (1s, 2s, 4s)
 DLQ: 3회 실패 시 Dead Letter Queue로 이동
+```
+
+**DLQ (Dead Letter Queue) 정책**:
+
+```yaml
+토픽 네이밍: dlq.{원본토픽명}
+  예시:
+    dlq.command.agent.trade.analyze-strategy
+    dlq.event.trade.execution
+    dlq.event.virtual-trade.execution
+
+보관 기간: 7일 (retention.ms = 604800000)
+파티션 수: 원본 토픽과 동일
+```
+
+```kotlin
+// 각 서비스의 DLQ Consumer 구현 패턴
+@KafkaListener(topicPattern = "dlq\\..*", groupId = "{service-name}-dlq-consumer")
+fun handleDLQ(record: ConsumerRecord<String, String>) {
+    logger.error("DLQ 메시지 수신: topic=${record.topic()}, key=${record.key()}")
+    // 1. 관리자 알림 발송 (NOTIFICATION_COMMAND_TOPIC)
+    // 2. DLQ 메트릭 증가
+    // 3. DB에 DLQ 레코드 저장 (수동 분석용, 선택적)
+}
 ```
 
 **gRPC Client**:
@@ -463,6 +531,11 @@ INTERNAL_ERROR     → 500
   - Execution
   - Signal
 
+운영 데이터:        30일 후 Hard Delete
+  - ProcessedEvents
+  - Outbox (발행 성공 후 7일)
+  - RefreshToken (만료 30일 후)
+
 마스터 데이터:      영구
   - User
   - Strategy
@@ -520,7 +593,7 @@ WHERE created_at < NOW() - INTERVAL '3 months';
 ```
 - RefreshToken (만료 30일 후)
 - Outbox (발행 성공 후 7일)
-- ProcessedEvents (처리 후 30일)
+- ProcessedEvents (처리 후 7일)
 ```
 
 ---
@@ -542,7 +615,7 @@ Public Key: User Service에서 제공 (/auth/public-key)
 **헤더 주입**:
 ```
 검증 성공 시:
-  X-User-Id: {userId}
+  X-User-Id: {userIdentifier}
   X-User-Role: {role}
 
 내부 서비스는 이 헤더를 신뢰하고 사용
@@ -552,35 +625,42 @@ Public Key: User Service에서 제공 (/auth/public-key)
 
 **사용자별 Rate Limit**:
 ```yaml
-인증 사용자:
-  - 일반: 1000 req/min
-  - ADMIN: 무제한
+인증 사용자 (USER):
+  - 300 req/min (userIdentifier 기준)
 
-미인증:
-  - 100 req/min (IP 기준)
+인증 사용자 (ADMIN):
+  - Rate Limit 없음 (내부 운영 도구)
+
+미인증 (PUBLIC):
+  - 20 req/min (IP 기준)
 ```
 
 **엔드포인트별 Rate Limit**:
 ```yaml
-POST /auth/sign-in:     5 req/min (무차별 대입 방지)
+POST /auth/sign-up:     20 req/min (IP 기준)
+POST /auth/sign-in:     20 req/min (IP 기준, 무차별 대입 방지)
 POST /orders:           100 req/min
-GET /*:                 1000 req/min
+GET /*:                 300 req/min
 ```
 
 ### 10.3 라우팅 규칙
 
 ```nginx
-/auth/*           → User Service
-/users/*          → User Service
-/exchange-accounts/* → Exchange Service
-/symbols/*        → Market Service
-/candles/*        → Market Service
-/strategies/*     → Agent Service
-/agents/*         → Agent Service
-/backtests/*      → Simulation Service
-/virtual-trades/* → VirtualTrade Service
-/trades/*         → Trade Service
-/notification-*   → Notification Service
+/auth/**                          → User Service
+/users/**                         → User Service
+/exchange-accounts/**             → Exchange Service
+/market-symbols/**                → Market Service
+/market-candle-collect-tasks/**   → Market Service
+/strategies/**                    → Agent Service
+/agents/**                        → Agent Service
+/backtests/**                     → Simulation Service
+/virtual-trades/**                → VirtualTrade Service
+/trade-registrations/**           → Trade Service
+/notification-channels/**        → Notification Service
+/notification-preferences/**     → Notification Service
+/notification-logs/**            → Notification Service
+/notification-templates/**       → Notification Service (ADMIN)
+/admin/**                         → API Gateway (자체, 권한 관리)
 ```
 
 ### 10.4 CORS 설정
@@ -618,7 +698,7 @@ max-age: 3600
 - [x] CSRF 방지 (SameSite Cookie, CORS)
 
 ### 11.4 권한 검증
-- [x] 사용자별 리소스 소유권 검증 (userId 일치 확인)
+- [x] 사용자별 리소스 소유권 검증 (userIdentifier 일치 확인)
 - [x] ADMIN 전용 API 분리
 - [x] Kafka ACL (토픽별 접근 제어)
 

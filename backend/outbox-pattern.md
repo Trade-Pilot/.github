@@ -51,11 +51,11 @@ Relay   → SELECT outbox WHERE status = PENDING (또는 재시도 가능 FAILED
 class OutboxEvent(
     val id: UUID,
     val aggregateType: String,         // 예: MarketCandleCollectTask
-    val aggregateId: String,           // Aggregate UUID
+    val aggregateIdentifier: String,           // Aggregate UUID
     val eventType: String,             // 예: FIND_ALL_MARKET_CANDLE_COMMAND
     val payload: String,               // JSON 직렬화 페이로드
-    val traceId: String?,              // 원본 요청 traceId (MDC에서 캡처)
-    val parentSpanId: String?,         // 원본 요청 spanId (MDC에서 캡처)
+    val traceIdentifier: String?,              // 원본 요청 traceId (MDC에서 캡처)
+    val parentSpanIdentifier: String?,         // 원본 요청 spanId (MDC에서 캡처)
     var status: OutboxStatus,          // PENDING → PUBLISHED / FAILED / DEAD
     var retryCount: Int = 0,           // Kafka 발행 실패 횟수 (MAX: 3)
     val createdAt: OffsetDateTime,
@@ -85,11 +85,11 @@ val span = tracer.currentSpan()
 OutboxEvent(
     id = UUID.randomUUID(),
     aggregateType = "...",
-    aggregateId = aggregate.identifier.value.toString(),
+    aggregateIdentifier = aggregate.identifier.value.toString(),
     eventType = "...",
     payload = objectMapper.writeValueAsString(commandPayload),
-    traceId = span?.context()?.traceId(),       // MDC에서 캡처
-    parentSpanId = span?.context()?.spanId(),   // MDC에서 캡처
+    traceIdentifier = span?.context()?.traceId(),       // MDC에서 캡처
+    parentSpanIdentifier = span?.context()?.spanId(),   // MDC에서 캡처
     status = OutboxStatus.PENDING,
     retryCount = 0,
     createdAt = OffsetDateTime.now(),
@@ -152,13 +152,13 @@ Kafka Consumer가 동일 traceId로 분산 트레이싱을 이어받는다.
 fun publishOutboxEvent(event: OutboxEvent, topic: String, partitionKey: String) {
     val record = ProducerRecord<String, String>(topic, partitionKey, event.payload)
 
-    event.traceId?.let {
-        val newSpanId = generateSpanId()
+    event.traceIdentifier?.let {
+        val newSpanIdentifier = generateSpanId()
         record.headers().add(
             "traceparent",
-            "00-${it}-${newSpanId}-01".toByteArray()
+            "00-${it}-${newSpanIdentifier}-01".toByteArray()
         )
-        event.parentSpanId?.let { parentId ->
+        event.parentSpanIdentifier?.let { parentId ->
             record.headers().add(
                 "tracestate",
                 "parentSpanId=${parentId}".toByteArray()
@@ -245,10 +245,25 @@ Jaeger / Zipkin에서 원본 HTTP 요청부터 Kafka Consumer까지
 |--------|-----------------|
 | User Service | `withdraw()` → `UserWithdrawnEvent` 발행 |
 | Market Service | `collectStart()` → COMMAND 발행, `collectComplete()` → EVENT 발행 |
-| Trade Service | 실주문 실행 커맨드, 체결 이벤트 발행 |
-| VirtualTrade Service | 가상 주문 체결 이벤트, 리스크 알림 이벤트 발행 |
+| Trade Service | 실주문 실행 커맨드, 체결 이벤트 발행, 주문 실패 이벤트 발행 |
+| VirtualTrade Service | 가상 주문 체결 이벤트(`ExecutionConfirmedEvent`) 발행 |
 
-### 8.3 멱등성 보장 — `processed_events` 테이블
+### 8.3 Outbox 미적용 서비스 및 사유
+
+| 서비스 | 사유 |
+|--------|------|
+| Exchange Service | Stateless 어댑터. DB 상태 변경 없이 거래소 API 호출 결과를 즉시 Kafka로 발행. 발행 실패 시 요청 서비스가 타임아웃으로 감지하고 재시도. |
+| Notification Service | Kafka 이벤트의 종착점(terminal consumer). 발송 실패 시 `NotificationLog`에 FAILED로 기록하며 DB 상태 불일치가 발생하지 않음. |
+| Simulation Service | Stateless 오케스트레이션 레이어. 자체 DB 없음. Kafka 발행 없음. |
+
+> **Agent Service**는 Outbox **적용** 대상이다 (섹션 8.2 참조). `AgentTerminatedEvent` 발행 시 Agent 상태 변경과 원자성 보장이 필요하다.
+
+> **Market Service 도메인 이벤트** (`MarketSymbolListedEvent`, `MarketSymbolDelistedEvent`)는 Outbox가 아닌
+> **Spring ApplicationEvent + `@Async`** 방식으로 발행한다. 이 이벤트들은 동일 서비스 내부에서만 소비되며
+> (MarketSymbol → MarketCandleCollectTask 생성/삭제), Kafka를 경유하지 않는다.
+> 발행 실패 시 수집 작업이 누락될 수 있으나, 다음 심볼 수집 스케줄러(일 1회)에서 자동 보정된다.
+
+### 8.4 멱등성 보장 — `processed_events` 테이블
 
 FAILED → 재시도 시 Kafka에 동일 메시지가 중복 발행될 수 있다.
 Consumer는 Kafka `(topic, partition, offset)` 조합으로 중복 처리를 방지한다.
@@ -284,7 +299,57 @@ fun onEvent(record: ConsumerRecord<String, String>) {
 }
 ```
 
-> `processed_events`는 일정 기간(예: 7일) 이후 오래된 레코드를 배치 삭제하여 테이블 크기를 관리한다.
+> `processed_events`는 처리 후 **7일** 이후 오래된 레코드를 배치 삭제하여 테이블 크기를 관리한다.
+
+---
+
+## 9. DEAD 레코드 복구 프로세스
+
+### 알림
+
+DEAD 상태 레코드 발생 시 **즉시** 관리자에게 알림을 발송한다.
+
+```kotlin
+// Relay Processor에서 DEAD 전환 시
+if (event.retryCount >= MAX_OUTBOX_RETRY_COUNT) {
+    event.status = OutboxStatus.DEAD
+    // Notification Command Topic으로 알림 발행
+    notificationPublisher.publish(SendNotificationCommand(
+        userIdentifier = ADMIN_USER_ID,
+        eventType = "OUTBOX_DEAD_ALERT",
+        variables = mapOf(
+            "service" to serviceName,
+            "aggregateType" to event.aggregateType,
+            "aggregateIdentifier" to event.aggregateIdentifier,
+            "eventType" to event.eventType,
+            "createdAt" to event.createdAt.toString(),
+        ),
+    ))
+}
+```
+
+### 수동 복구 API
+
+각 서비스는 DEAD 상태 Outbox를 재시도할 수 있는 Admin API를 제공한다.
+
+```
+GET  /admin/outbox/dead              -- DEAD 레코드 목록 조회
+PUT  /admin/outbox/{id}/retry        -- DEAD → PENDING, retryCount 초기화
+DELETE /admin/outbox/{id}            -- DEAD 레코드 영구 삭제 (잘못된 메시지인 경우)
+```
+
+### 복구 절차 매뉴얼
+
+```
+1. 알림 수신 → DEAD 레코드 확인 (GET /admin/outbox/dead)
+2. 원인 파악:
+   - "Kafka timeout"         → Kafka Broker 상태 확인 후 PUT /admin/outbox/{id}/retry
+   - "Unknown topic"         → 토픽 생성 또는 ACL 추가 후 retry
+   - "Message too large"     → payload 검증, 필요 시 DELETE 후 수동 처리
+   - "Serialization error"   → 코드 버그 → 핫픽스 후 retry
+3. retry 후 PUBLISHED 여부 확인
+4. 반복 실패 시: payload를 수동으로 Kafka에 발행하거나 Consumer에 직접 전달
+```
 
 ---
 

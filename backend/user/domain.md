@@ -217,19 +217,19 @@ interface RefreshTokenUseCase {
 }
 
 interface SignOutUseCase {
-    fun signOut(refreshTokenId: RefreshTokenId)
+    fun signOut(refreshTokenIdentifier: RefreshTokenId)
 }
 ```
 
 ### 7.2 사용자 관리
 ```kotlin
 interface GetUserUseCase {
-    fun getUser(userId: UserId): User
+    fun getUser(userIdentifier: UserId): User
 }
 
 interface UpdateUserUseCase {
-    fun updateProfile(userId: UserId, command: UpdateProfileCommand)
-    fun changePassword(userId: UserId, command: ChangePasswordCommand)
+    fun updateProfile(userIdentifier: UserId, command: UpdateProfileCommand)
+    fun changePassword(userIdentifier: UserId, command: ChangePasswordCommand)
 }
 
 interface WithdrawUseCase {
@@ -238,13 +238,13 @@ interface WithdrawUseCase {
 }
 
 data class WithdrawCommand(
-    val userId: UserId,
+    val userIdentifier: UserId,
     val password: String,   // 비밀번호 재확인용 (평문, bcrypt 검증 후 파기)
 )
 
 interface ManageUserUseCase {
-    fun suspend(userId: UserId)         // ADMIN only
-    fun activate(userId: UserId)        // ADMIN only
+    fun suspend(userIdentifier: UserId)         // ADMIN only
+    fun activate(userIdentifier: UserId)        // ADMIN only
 }
 ```
 
