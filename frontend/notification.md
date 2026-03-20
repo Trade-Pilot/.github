@@ -43,15 +43,18 @@ src/
 │   └── notification-settings/      # 알림 채널 및 트리거 설정 페이지
 │
 ├── widgets/
-│   ├── notification-list/          # 드롭다운 또는 사이드바 알림 목록
-│   └── external-channel-form/      # 텔레그램/슬랙 설정 폼
+│   └── notification-badge/          # 헤더 알림 배지 + 드롭다운 (다중 페이지 재사용)
 │
 ├── features/
-│   ├── toggle-notification-sound/  # 알림음 온/오프
-│   └── send-test-message/          # 연동 테스트 발송
+│   ├── toggle-notification-sound/   # 알림음 온/오프
+│   ├── send-test-message/           # 연동 테스트 발송
+│   ├── manage-channel/              # 채널 등록/삭제/활성화 (설정 페이지 전용)
+│   └── manage-preference/           # 이벤트별 수신 설정 (설정 페이지 전용)
 │
 └── entities/
     └── notification/               # Notification 도메인 슬라이스
         ├── api/                    # notificationApi
         └── model/                  # schemas.ts (NotificationLog, ChannelConfig)
 ```
+
+> **분류 기준**: `notification-badge`만 Widget (헤더에서 모든 페이지에 표시). 나머지는 `notification-settings` 페이지 전용이므로 Feature로 분류.

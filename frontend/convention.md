@@ -2014,3 +2014,228 @@ jobs:
 | `'RUNNING'` | `'COLLECTING'` |
 | `'ACTIVE'`  | `'COLLECTING'` |
 | `'STOPPED'` | `'PAUSED'` |
+
+---
+
+## 26. API 에러 응답 처리 규칙
+
+```typescript
+// shared/model/apiError.ts
+export const ApiErrorSchema = z.object({
+  code:      z.string(),                    // 'U001', 'MS001' 등
+  message:   z.string(),
+  timestamp: z.string().datetime(),
+  path:      z.string(),
+  details:   z.record(z.string()).nullable(),
+})
+export type ApiError = z.infer<typeof ApiErrorSchema>
+```
+
+에러 핸들링 전략:
+- 4xx: 사용자 입력 문제 → 인라인 에러 메시지 표시
+- 401: 토큰 만료 → 자동 갱신 시도 → 실패 시 로그인 리다이렉트
+- 403: 권한 없음 → "접근 권한이 없습니다" 토스트
+- 409: 상태 충돌 → 상태에 맞는 안내 메시지 (예: "이미 활성화된 에이전트입니다")
+- 429: Rate Limit → "요청이 많습니다. 잠시 후 다시 시도해주세요" 토스트
+- 5xx: 서버 오류 → "일시적인 오류입니다" 토스트 + 자동 재시도 (TanStack Query retry)
+
+Axios 인터셉터 패턴:
+```typescript
+// shared/api/axiosInstance.ts
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const apiError = parseOrThrow(ApiErrorSchema, error.response?.data)
+
+    if (error.response?.status === 401) {
+      // 토큰 갱신 시도
+      const refreshed = await tryRefreshToken()
+      if (refreshed) return api.request(error.config)
+      // 실패 시 로그아웃
+      useAuthStore.getState().logout()
+      window.location.href = '/sign-in'
+    }
+
+    return Promise.reject(apiError)
+  }
+)
+```
+
+## 27. 금융 데이터 처리 규칙
+
+**핵심 원칙**: 모든 금액/수량은 **문자열(string)** 상태로 전달받고, 연산 시에만 `Decimal.js`로 변환한다.
+
+```typescript
+// ✅ 백엔드 응답: 모든 금융 필드는 string
+interface PortfolioResponse {
+  cash: string           // "1000000.50"
+  totalValue: string     // "2500000.75"
+}
+
+// ✅ 연산이 필요한 시점에만 Decimal 변환
+import Decimal from 'decimal.js'
+const cash = new Decimal(portfolio.cash)
+const pnl = cash.minus(initialCapital)
+const pnlPercent = pnl.div(initialCapital).mul(100).toFixed(2)
+
+// ✅ 화면 표시
+formatCurrency(portfolio.cash)  // "1,000,000.50 원"
+
+// ❌ 절대 금지
+const cash = parseFloat(portfolio.cash)      // 부동소수점 오차!
+const cash = Number(portfolio.cash)          // 동일한 문제
+```
+
+Zod 스키마에서의 적용:
+```typescript
+// ✅ 금융 필드는 z.string()
+export const PortfolioSchema = z.object({
+  cash:         z.string(),   // Decimal string
+  reservedCash: z.string(),
+  totalValue:   z.string(),
+  realizedPnl:  z.string(),
+})
+
+// ❌ z.number() 금지 (금융 데이터)
+cash: z.number()  // 파싱 시 정밀도 손실
+```
+
+## 28. 시간대 처리 규칙
+
+**원칙**: 백엔드는 UTC, 프론트엔드 표시는 KST
+
+```typescript
+// ✅ Day.js + timezone 플러그인
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
+dayjs.extend(utc)
+dayjs.extend(timezone)
+
+// 백엔드 응답 (UTC)
+const raw = "2024-01-15T09:00:00Z"
+
+// KST 변환 표시
+dayjs(raw).tz('Asia/Seoul').format('YYYY-MM-DD HH:mm:ss')
+// → "2024-01-15 18:00:00"
+
+// ❌ new Date() 사용 금지 (브라우저 로컬 시간대 의존)
+new Date(raw).toLocaleString()  // 사용자 OS 설정에 따라 달라짐
+
+// ❌ 시간대 없는 문자열 파싱 금지
+dayjs("2024-01-15 18:00:00")  // UTC인지 KST인지 모호
+```
+
+캔들 차트에서:
+```typescript
+// Lightweight Charts의 time은 Unix timestamp (초 단위)
+const time = dayjs(candle.time).unix()
+
+// 차트 시간축은 UTC 기준, 표시만 KST 오프셋 적용
+chart.applyOptions({
+  localization: { timeFormatter: (t) => dayjs.unix(t).tz('Asia/Seoul').format('HH:mm') },
+  timeScale: { timeVisible: true, secondsVisible: false },
+})
+```
+
+## 29. WebSocket + TanStack Query 동기화 전략
+
+실시간 데이터(WebSocket)와 서버 상태(TanStack Query) 간 일관성을 보장하는 규칙.
+
+**데이터 흐름**:
+```
+초기 로드: TanStack Query useQuery() → API 호출 → 캐시 저장
+실시간 갱신: WebSocket 메시지 수신 → queryClient.setQueryData() 직접 갱신
+폴백: WebSocket 연결 끊김 → TanStack Query refetchOnWindowFocus로 복구
+```
+
+```typescript
+// ✅ WebSocket 메시지로 TanStack Query 캐시 직접 갱신
+const queryClient = useQueryClient()
+
+useWebSocketSubscription('portfolio:{agentIdentifier}', (data) => {
+  queryClient.setQueryData(
+    ['agents', agentIdentifier, 'portfolio'],
+    data
+  )
+})
+
+// ✅ WebSocket 연결 끊김 시 자동 폴백
+useQuery({
+  queryKey: ['agents', agentIdentifier, 'portfolio'],
+  queryFn: () => agentApi.getPortfolio(agentIdentifier),
+  refetchInterval: isWebSocketConnected ? false : 5000,  // WS 끊기면 5초 폴링
+})
+```
+
+**우선순위**:
+1. WebSocket (실시간, 최우선)
+2. TanStack Query 캐시 (WebSocket 갱신 반영)
+3. 폴링 (WebSocket 장애 시 폴백)
+
+**BroadcastChannel과의 관계**:
+- BroadcastChannel: 로컬 탭 간 UI 상태 동기화 (예: EMERGENCY_STOP, AUTH_LOGOUT)
+- WebSocket/TanStack Query: 서버 데이터 동기화
+- BroadcastChannel은 서버 데이터를 전파하지 않는다 (각 탭이 독립적으로 WebSocket 구독)
+
+## 30. 네트워크 장애 복구 전략
+
+**Latency 경고 자동 해제**:
+- Latency < 100ms가 5초 연속 유지 → Grayscale 자동 해제
+- 해제 시 "연결이 복구되었습니다" 토스트 표시 (3초 후 자동 닫힘)
+
+**주문 버튼 재활성화**:
+- WebSocket 재연결 + Health Check 통과 → 자동 재활성화
+- 재활성화 전 "주문 기능이 복구되었습니다" 확인 토스트
+
+**오프라인 모드**:
+- `navigator.onLine` + WebSocket 상태로 감지
+- 오프라인 시: 읽기 전용 모드 (캐시된 데이터 표시), 쓰기 작업 비활성화
+- 온라인 복구 시: TanStack Query invalidateQueries() 전체 갱신
+
+## 31. 반응형 브레이크포인트 규칙
+
+| 브레이크포인트 | 범위 | 레이아웃 |
+|-------------|------|---------|
+| `sm` | < 640px | 1단 레이아웃, 차트 풀스크린, 하단 탭 네비게이션 |
+| `md` | 640~1024px | 2단 레이아웃, 사이드 패널 축약 |
+| `lg` | 1024~1280px | 3단 레이아웃, 기본 데스크톱 뷰 |
+| `xl` | > 1280px | 와이드 모니터 최적화, 멀티패널 |
+
+**모바일 UX 특수 규칙**:
+- 터치 타겟: 최소 44px × 44px (WCAG 2.1 AAA)
+- 차트: 터치 줌/팬 지원, 기술 지표 최대 2개
+- 주문 UI: 풀스크린 모달, 큰 입력 필드
+- 비상 정지: 화면 하단 고정 플로팅 버튼
+- 버튼 간 최소 8px 간격 (오터치 방지)
+
+## 32. 기술 지표 차트 오버레이 규칙
+
+### 색상 팔레트
+
+| 지표 | 색상 | HEX | 용도 |
+|------|------|-----|------|
+| MA (단기) | 파란색 | `#4A90E2` | shortPeriod 이동평균선 |
+| MA (장기) | 주황색 | `#F5A623` | longPeriod 이동평균선 |
+| RSI | 보라색 | `#9B59B6` | 별도 하단 패널 |
+| MACD Line | 초록색 | `#7ED321` | 별도 하단 패널 |
+| MACD Signal | 빨간색 | `#E74C3C` | 별도 하단 패널 |
+| Bollinger Upper/Lower | 회색 | `#D0D0D0` | 캔들 차트 위 오버레이 |
+| Bollinger Middle | 점선 회색 | `#A0A0A0` | 캔들 차트 위 오버레이 |
+
+### 렌더링 규칙
+- 캔들 차트 위 오버레이: MA, Bollinger (최대 3개 동시)
+- 별도 하단 패널: RSI, MACD, Stochastic (최대 1개)
+- 지표 토글: 범례(Legend) 클릭으로 on/off
+- 범례 위치: 차트 좌상단 (opacity: 0.85)
+- 모바일: 범례 좌하단, 지표 최대 2개
+
+### 신호 마커
+
+| 신호 | 아이콘 | 색상 | 위치 |
+|------|--------|------|------|
+| BUY | ▲ (삼각형) | `stock-up` (#F04452) | 캔들 하단 |
+| SELL | ▼ (역삼각형) | `stock-down` (#4066E4) | 캔들 상단 |
+
+- 마커 크기: confidence 0.5~1.0에 비례 (8px~16px)
+- 마커 호버: 툴팁으로 confidence, reason, suggestedQuantity 표시

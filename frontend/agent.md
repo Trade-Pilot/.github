@@ -53,7 +53,7 @@ export enum StrategyStatus {
 
 // entities/agent/model/schemas.ts
 export const StrategySchema = z.object({
-  identifier:  z.string().uuid(),
+  strategyIdentifier: z.string().uuid(),
   name:        z.string().min(1, '전략 이름을 입력해주세요.'),
   description: z.string().optional(),
   type:        z.enum(['MANUAL', 'AI']),
@@ -70,9 +70,9 @@ export type Strategy = z.infer<typeof StrategySchema>;
 ```typescript
 // entities/agent/model/schemas.ts
 export const AgentSchema = z.object({
-  identifier:     z.string().uuid(),
-  name:           z.string(),
-  strategyId:     z.string().uuid(),
+  agentIdentifier:    z.string().uuid(),
+  name:               z.string(),
+  strategyIdentifier: z.string().uuid(),
   status:         z.enum(['INACTIVE', 'ACTIVE', 'PAUSED', 'TERMINATED']),
   initialCapital: z.string(), // Decimal.js 처리를 위해 string 유지
   riskConfig:     z.object({
@@ -138,9 +138,17 @@ const STRATEGY_TEMPLATES = {
 
 백엔드 설계의 핵심인 `reservedCash`와 `reservedQuantity`를 사용자에게 명확히 전달해야 합니다.
 
-*   **가용 자산**: `cash - reservedCash`. 실제 주문 가능한 현금.
-*   **점유 중**: 현재 거래소에 주문이 나가서 체결 대기 중인 금액.
+*   **가용 자산**: `cash - reservedCash`. 실제 주문 가능한 현금 (Decimal.js 연산).
+*   **점유 중**: 현재 거래소에 주문이 나가서 체결 대기 중인 금액 (`reservedCash` 필드).
 *   **UI 표현**: 자산 바 차트에서 '실제 잔고' 중 일부를 '주문 대기 중' 영역으로 별도 색상 처리.
+*   **WebSocket 실시간 갱신**: `portfolio:{agentIdentifier}` 채널 구독으로 체결 시 즉시 반영.
+    ```typescript
+    // widgets/portfolio-summary/model/usePortfolioWebSocket.ts
+    const queryClient = useQueryClient()
+    useWebSocketSubscription(`portfolio:${agentIdentifier}`, (data) => {
+      queryClient.setQueryData(['agents', agentIdentifier, 'portfolio'], data)
+    })
+    ```
 
 ---
 
@@ -155,5 +163,6 @@ const STRATEGY_TEMPLATES = {
 ## 7. 차트 연동 (Decision Overlay)
 
 캔들 차트 위에 에이전트의 결정 로그를 오버레이합니다.
-*   **신호 표시**: 차트 상단에 `B`(Buy), `S`(Sell) 아이콘 표시.
-*   **지표 오버레이**: 해당 전략이 사용 중인 지표(예: MA 선)를 차트에 함께 렌더링하여 신호 발생 근거를 시각적으로 확인.
+*   **신호 마커**: BUY는 캔들 하단에 `▲`(stock-up 색상), SELL은 캔들 상단에 `▼`(stock-down 색상). 마커 크기는 confidence에 비례(8~16px).
+*   **지표 오버레이**: 해당 전략이 사용 중인 지표(예: MA 선)를 차트에 함께 렌더링. 색상 규칙은 `convention.md` Section 32 참조.
+*   **지표 최대 개수**: 캔들 차트 오버레이 최대 3개 + 하단 패널 최대 1개.

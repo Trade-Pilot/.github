@@ -27,6 +27,35 @@
 *   **Sharding Status**: 현재 수집 워커(Pod)별로 할당된 심볼 수와 부하 분산 상태 확인.
 *   **Force Collect**: 특정 심볼이나 기간에 대해 수집 스케줄러와 무관하게 즉시 수집을 명령하는 기능.
 
+### 2.3.1 Force Collect 모달
+
+특정 심볼에 대해 수집 스케줄러와 무관하게 즉시 수집을 명령한다.
+
+*   **UI 컴포넌트**: `features/force-collect/ui/ForceCollectModal.tsx`
+*   **흐름**:
+    1. "즉시 수집" 버튼 클릭 → 모달 오픈
+    2. 대상 심볼 선택 (검색 가능 드롭다운, 복수 선택)
+    3. "수집 시작" 클릭 → `POST /market-symbols/collect` 호출 (202 Accepted)
+    4. 토스트: "수집이 시작되었습니다. 완료 시 알림을 받습니다."
+    5. 수집 완료/실패 시 Notification 알림으로 결과 수신
+
+### 2.4 감사 로그 (Audit Log)
+
+관리자가 수행한 모든 제어 액션 이력을 조회한다.
+
+*   **UI 컴포넌트**: `widgets/audit-log-table/ui/AuditLogTable.tsx`
+*   **컬럼**:
+    | 컬럼 | 타입 | 설명 |
+    |------|------|------|
+    | 시각 | datetime | 액션 실행 시각 (KST) |
+    | 관리자 | string | 실행한 관리자 이름 |
+    | 액션 | badge | EMERGENCY_STOP, MANUAL_RETRY, FORCE_COLLECT 등 |
+    | 대상 | string | 에이전트/심볼/주문 식별자 |
+    | 결과 | badge | SUCCESS, FAILED, IN_PROGRESS |
+    | Correlation ID | link | 분산 트레이싱 연결 |
+*   **필터**: 기간, 액션 타입, 결과 상태
+*   **페이지네이션**: TanStack Query `useInfiniteQuery` + 가상 스크롤
+
 ---
 
 ## 3. UI/UX 제어

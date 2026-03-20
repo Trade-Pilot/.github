@@ -44,15 +44,52 @@ src/
 *   **심볼 및 기간**: 특정 거래 심볼과 과거 날짜 범위(`from`, `to`) 선택.
 *   **초기 자본금**: 에이전트 설정값을 기본으로 하되, 시뮬레이션 시 일시적 변경 가능.
 
-### 3.2 비동기 작업 추적 및 SSE 합류 (Task-based SSE)
+### 3.2 Streaming POST 기반 SSE
 
-백테스팅은 백그라운드에서 실행되므로, 사용자가 페이지를 새로고침하거나 나중에 다시 진입해도 진행 상황을 복구할 수 있어야 한다. SSE 처리 방식은 `convention.md` 11.5절의 표준을 따른다.
+백테스팅은 `POST /backtests` 호출 시 즉시 SSE 스트림으로 응답한다.
+별도의 task ID 기반 재연결은 지원하지 않는다.
 
-*   **Task Persistence**: 백테스팅 시작 시 발급받은 `taskId`를 Zustand 또는 URL 파라미터에 저장한다.
-*   **Resume Flow (useSSE Hook)**: 
-    1. 페이지 진입 시 실행 중인 `taskId`가 있는지 확인한다.
-    2. 있다면 `GET /backtests/{taskId}/stream`에 연결하여 실시간 데이터를 수신한다.
-    3. 컴포넌트 언마운트 시 반드시 `eventSource.close()`를 실행한다.
+*   **실행 흐름**:
+    1. 사용자가 설정 완료 후 "백테스트 시작" 클릭
+    2. `POST /backtests` 호출 (Accept: text/event-stream)
+    3. 응답을 Fetch API ReadableStream으로 수신하며 SSE 이벤트를 파싱
+    4. 각 이벤트(signal, done, error)를 UI에 실시간 반영
+    5. 컴포넌트 언마운트 시 `AbortController.abort()`로 스트림 중단
+
+*   **구현 패턴**:
+    ```typescript
+    // entities/simulation/api/backtestApi.ts
+    export async function* streamBacktest(
+      config: RunBacktestCommand,
+      signal: AbortSignal,
+    ): AsyncGenerator<BacktestSignalResult> {
+      const response = await fetch('/backtests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+        body: JSON.stringify(config),
+        signal,
+      })
+
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const text = decoder.decode(value)
+        for (const event of parseSSEEvents(text)) {
+          if (event.type === 'done') return
+          if (event.type === 'error') throw new BacktestError(event.data)
+          yield parseOrThrow(BacktestSignalResultSchema, JSON.parse(event.data))
+        }
+      }
+    }
+    ```
+
+*   **페이지 이탈 시 처리**:
+    - `AbortController`로 Fetch 요청 취소 → 서버 측 gRPC 스트림도 자동 종료
+    - 백테스팅 결과는 Agent Service에 저장되므로, 완료된 결과는 `GET /agents/{id}/backtests`로 조회 가능
+
 *   **Background Notification**: 백테스팅이 완료되면 브라우저 알림 센터를 통해 "백테스팅 완료" 메시지를 띄워 사용자가 결과를 확인하도록 유도한다.
 
 ---
