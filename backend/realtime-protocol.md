@@ -101,11 +101,14 @@ Sec-WebSocket-Version: 13
   "data": {
     "agentIdentifier": "660e8400-e29b-41d4-a716-446655440000",
     "cash": "1000000",
+    "reservedCash": "500000",
     "totalValue": "2500000",
+    "realizedPnl": "50000",
     "positions": [
       {
         "symbolIdentifier": "550e8400-e29b-41d4-a716-446655440000",
         "quantity": "0.03",
+        "reservedQuantity": "0.01",
         "averagePrice": "50000000",
         "currentPrice": "50050000",
         "unrealizedPnl": "1500"

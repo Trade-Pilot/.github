@@ -57,12 +57,12 @@ Authorization: Bearer <AccessToken>
 ```json
 {
   "data": {
-    "accountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
+    "exchangeAccountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
     "userIdentifier": "550e8400-e29b-41d4-a716-446655440000",
     "exchange": "UPBIT",
     "status": "ACTIVE",
-    "createdAt": "2026-03-20T12:00:00+09:00",
-    "updatedAt": "2026-03-20T12:00:00+09:00"
+    "createdDate": "2026-03-20T12:00:00+09:00",
+    "modifiedDate": "2026-03-20T12:00:00+09:00"
   }
 }
 ```
@@ -88,13 +88,13 @@ Authorization: Bearer <AccessToken>
 {
   "data": [
     {
-      "accountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
+      "exchangeAccountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
       "userIdentifier": "550e8400-e29b-41d4-a716-446655440000",
       "exchange": "UPBIT",
       "maskedAccessKey": "****a1b2",
       "status": "ACTIVE",
-      "createdAt": "2026-03-20T12:00:00+09:00",
-      "updatedAt": "2026-03-20T12:00:00+09:00"
+      "createdDate": "2026-03-20T12:00:00+09:00",
+      "modifiedDate": "2026-03-20T12:00:00+09:00"
     }
   ]
 }
@@ -105,25 +105,25 @@ Authorization: Bearer <AccessToken>
 ---
 
 ### 거래소 계정 상세 조회
-**`GET /exchange-accounts/{accountIdentifier}`** | Role: USER
+**`GET /exchange-accounts/{exchangeAccountIdentifier}`** | Role: USER
 
 **Path Parameter:**
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| `accountIdentifier` | `UUID` | O | 거래소 계정 식별자 |
+| `exchangeAccountIdentifier` | `UUID` | O | 거래소 계정 식별자 |
 
 **Response:** `200 OK`
 ```json
 {
   "data": {
-    "accountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
+    "exchangeAccountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
     "userIdentifier": "550e8400-e29b-41d4-a716-446655440000",
     "exchange": "UPBIT",
     "maskedAccessKey": "****a1b2",
     "status": "ACTIVE",
-    "createdAt": "2026-03-20T12:00:00+09:00",
-    "updatedAt": "2026-03-20T12:00:00+09:00"
+    "createdDate": "2026-03-20T12:00:00+09:00",
+    "modifiedDate": "2026-03-20T12:00:00+09:00"
   }
 }
 ```
@@ -137,13 +137,13 @@ Authorization: Bearer <AccessToken>
 ---
 
 ### API Key 삭제
-**`DELETE /exchange-accounts/{accountIdentifier}`** | Role: USER
+**`DELETE /exchange-accounts/{exchangeAccountIdentifier}`** | Role: USER
 
 **Path Parameter:**
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| `accountIdentifier` | `UUID` | O | 거래소 계정 식별자 |
+| `exchangeAccountIdentifier` | `UUID` | O | 거래소 계정 식별자 |
 
 **Request:**
 - Body 없음
@@ -162,13 +162,13 @@ Authorization: Bearer <AccessToken>
 ---
 
 ### API Key 유효성 검증
-**`POST /exchange-accounts/{accountIdentifier}/validate`** | Role: USER
+**`POST /exchange-accounts/{exchangeAccountIdentifier}/validate`** | Role: USER
 
 **Path Parameter:**
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| `accountIdentifier` | `UUID` | O | 거래소 계정 식별자 |
+| `exchangeAccountIdentifier` | `UUID` | O | 거래소 계정 식별자 |
 
 **Request:**
 - Body 없음
@@ -177,7 +177,7 @@ Authorization: Bearer <AccessToken>
 ```json
 {
   "data": {
-    "accountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
+    "exchangeAccountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
     "valid": true,
     "exchange": "UPBIT"
   }
@@ -190,7 +190,7 @@ Authorization: Bearer <AccessToken>
 ```json
 {
   "data": {
-    "accountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
+    "exchangeAccountIdentifier": "660e8400-e29b-41d4-a716-446655440000",
     "valid": false,
     "exchange": "UPBIT"
   }

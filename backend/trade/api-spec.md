@@ -92,8 +92,8 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
       "limitOrderTimeoutMinutes": 30
     },
     "emergencyStopped": false,
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T00:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T00:00:00Z"
   }
 }
 ```
@@ -134,8 +134,8 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
         "limitOrderTimeoutMinutes": 30
       },
       "emergencyStopped": false,
-      "createdAt": "2024-01-01T00:00:00Z",
-      "updatedAt": "2024-01-01T00:00:00Z"
+      "createdDate": "2024-01-01T00:00:00Z",
+      "modifiedDate": "2024-01-01T00:00:00Z"
     }
   ],
   "page": { "number": 0, "size": 20, "totalElements": 2, "totalPages": 1 }
@@ -168,8 +168,8 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
       "limitOrderTimeoutMinutes": 30
     },
     "emergencyStopped": false,
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T00:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T00:00:00Z"
   }
 }
 ```
@@ -197,7 +197,7 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
   "data": {
     "registrationIdentifier": "uuid",
     "status": "ACTIVE",
-    "updatedAt": "2024-01-01T01:00:00Z"
+    "modifiedDate": "2024-01-01T01:00:00Z"
   }
 }
 ```
@@ -227,7 +227,7 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
   "data": {
     "registrationIdentifier": "uuid",
     "status": "PAUSED",
-    "updatedAt": "2024-01-01T02:00:00Z"
+    "modifiedDate": "2024-01-01T02:00:00Z"
   }
 }
 ```
@@ -257,7 +257,7 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
   "data": {
     "registrationIdentifier": "uuid",
     "status": "STOPPED",
-    "updatedAt": "2024-01-01T03:00:00Z"
+    "modifiedDate": "2024-01-01T03:00:00Z"
   }
 }
 ```
@@ -292,7 +292,7 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
   "data": {
     "registrationIdentifier": "uuid",
     "symbolIdentifiers": ["uuid-1", "uuid-2", "uuid-3"],
-    "updatedAt": "2024-01-01T04:00:00Z"
+    "modifiedDate": "2024-01-01T04:00:00Z"
   }
 }
 ```
@@ -334,7 +334,7 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
       "orderType": "MARKET",
       "limitOrderTimeoutMinutes": null
     },
-    "updatedAt": "2024-01-01T05:00:00Z"
+    "modifiedDate": "2024-01-01T05:00:00Z"
   }
 }
 ```
@@ -366,7 +366,7 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
     "status": "PAUSED",
     "emergencyStopped": true,
     "cancelledOrderCount": 3,
-    "updatedAt": "2024-01-01T06:00:00Z"
+    "modifiedDate": "2024-01-01T06:00:00Z"
   }
 }
 ```
@@ -398,7 +398,7 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
     "registrationIdentifier": "uuid",
     "status": "PAUSED",
     "emergencyStopped": false,
-    "updatedAt": "2024-01-01T07:00:00Z"
+    "modifiedDate": "2024-01-01T07:00:00Z"
   }
 }
 ```
@@ -453,7 +453,7 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
   "data": {
     "registrationIdentifier": "uuid",
     "allocatedCapital": 10000000,
-    "updatedAt": "2024-01-01T08:00:00Z"
+    "modifiedDate": "2024-01-01T08:00:00Z"
   }
 }
 ```
@@ -501,8 +501,8 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
       "status": "FILLED",
       "exchangeOrderId": "EX-12345",
       "timeoutAt": "2024-01-01T10:00:00Z",
-      "createdAt": "2024-01-01T09:30:00Z",
-      "updatedAt": "2024-01-01T09:35:00Z"
+      "createdDate": "2024-01-01T09:30:00Z",
+      "modifiedDate": "2024-01-01T09:35:00Z"
     }
   ],
   "page": { "number": 0, "size": 20, "totalElements": 15, "totalPages": 1 }
@@ -546,8 +546,8 @@ fun validateOrderOwnership(registrationIdentifier: UUID, orderIdentifier: UUID, 
     "status": "FILLED",
     "exchangeOrderId": "EX-12345",
     "timeoutAt": "2024-01-01T10:00:00Z",
-    "createdAt": "2024-01-01T09:30:00Z",
-    "updatedAt": "2024-01-01T09:35:00Z",
+    "createdDate": "2024-01-01T09:30:00Z",
+    "modifiedDate": "2024-01-01T09:35:00Z",
     "executions": [
       {
         "executionIdentifier": "uuid",

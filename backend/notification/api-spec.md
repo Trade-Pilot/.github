@@ -330,7 +330,7 @@ Authorization: Bearer <AccessToken>
       "status": "SENT",
       "failureReason": null,
       "retryCount": 0,
-      "createdAt": "2026-03-20T14:00:00+09:00",
+      "createdDate": "2026-03-20T14:00:00+09:00",
       "sentAt": "2026-03-20T14:00:01+09:00"
     }
   ],

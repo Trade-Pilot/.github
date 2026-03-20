@@ -60,8 +60,8 @@ fun validateOwnership(registrationIdentifier: UUID, userIdentifier: UUID) {
     "userIdentifier": "uuid",
     "symbolIdentifiers": ["uuid-1", "uuid-2"],
     "status": "ACTIVE",
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T00:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T00:00:00Z"
   }
 }
 ```
@@ -93,8 +93,8 @@ fun validateOwnership(registrationIdentifier: UUID, userIdentifier: UUID) {
       "agentIdentifier": "uuid",
       "symbolIdentifiers": ["uuid-1", "uuid-2"],
       "status": "ACTIVE",
-      "createdAt": "2024-01-01T00:00:00Z",
-      "updatedAt": "2024-01-01T00:00:00Z"
+      "createdDate": "2024-01-01T00:00:00Z",
+      "modifiedDate": "2024-01-01T00:00:00Z"
     }
   ],
   "page": { "number": 0, "size": 20, "totalElements": 3, "totalPages": 1 }
@@ -120,8 +120,8 @@ fun validateOwnership(registrationIdentifier: UUID, userIdentifier: UUID) {
     "userIdentifier": "uuid",
     "symbolIdentifiers": ["uuid-1", "uuid-2"],
     "status": "ACTIVE",
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T00:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T00:00:00Z"
   }
 }
 ```
@@ -149,7 +149,7 @@ fun validateOwnership(registrationIdentifier: UUID, userIdentifier: UUID) {
   "data": {
     "registrationIdentifier": "uuid",
     "status": "ACTIVE",
-    "updatedAt": "2024-01-01T01:00:00Z"
+    "modifiedDate": "2024-01-01T01:00:00Z"
   }
 }
 ```
@@ -179,7 +179,7 @@ fun validateOwnership(registrationIdentifier: UUID, userIdentifier: UUID) {
   "data": {
     "registrationIdentifier": "uuid",
     "status": "PAUSED",
-    "updatedAt": "2024-01-01T02:00:00Z"
+    "modifiedDate": "2024-01-01T02:00:00Z"
   }
 }
 ```
@@ -209,7 +209,7 @@ fun validateOwnership(registrationIdentifier: UUID, userIdentifier: UUID) {
   "data": {
     "registrationIdentifier": "uuid",
     "status": "STOPPED",
-    "updatedAt": "2024-01-01T03:00:00Z"
+    "modifiedDate": "2024-01-01T03:00:00Z"
   }
 }
 ```
@@ -244,7 +244,7 @@ fun validateOwnership(registrationIdentifier: UUID, userIdentifier: UUID) {
   "data": {
     "registrationIdentifier": "uuid",
     "symbolIdentifiers": ["uuid-1", "uuid-2", "uuid-3"],
-    "updatedAt": "2024-01-01T04:00:00Z"
+    "modifiedDate": "2024-01-01T04:00:00Z"
   }
 }
 ```

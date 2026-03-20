@@ -76,8 +76,8 @@
       "longPeriod": 20,
       "interval": "HOUR_1"
     },
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T00:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T00:00:00Z"
   }
 }
 ```
@@ -110,8 +110,8 @@
       "market": "COIN",
       "status": "DRAFT",
       "parameters": { "strategyKind": "MA_CROSSOVER", "shortPeriod": 5, "longPeriod": 20, "interval": "HOUR_1" },
-      "createdAt": "2024-01-01T00:00:00Z",
-      "updatedAt": "2024-01-01T00:00:00Z"
+      "createdDate": "2024-01-01T00:00:00Z",
+      "modifiedDate": "2024-01-01T00:00:00Z"
     }
   ],
   "page": { "number": 0, "size": 20, "totalElements": 3, "totalPages": 1 }
@@ -145,8 +145,8 @@
       "longPeriod": 20,
       "interval": "HOUR_1"
     },
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T00:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T00:00:00Z"
   }
 }
 ```
@@ -198,8 +198,8 @@
       "longPeriod": 30,
       "interval": "HOUR_1"
     },
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T01:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T01:00:00Z"
   }
 }
 ```
@@ -248,7 +248,7 @@
   "data": {
     "strategyIdentifier": "uuid",
     "status": "VALIDATED",
-    "updatedAt": "2024-01-01T01:00:00Z"
+    "modifiedDate": "2024-01-01T01:00:00Z"
   }
 }
 ```
@@ -277,7 +277,7 @@
   "data": {
     "strategyIdentifier": "uuid",
     "status": "DEPRECATED",
-    "updatedAt": "2024-01-01T02:00:00Z"
+    "modifiedDate": "2024-01-01T02:00:00Z"
   }
 }
 ```
@@ -329,8 +329,8 @@
       "takeProfitPercent": 0.10
     },
     "initialCapital": 10000000,
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T00:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T00:00:00Z"
   }
 }
 ```
@@ -370,8 +370,8 @@
         "takeProfitPercent": 0.10
       },
       "initialCapital": 10000000,
-      "createdAt": "2024-01-01T00:00:00Z",
-      "updatedAt": "2024-01-01T00:00:00Z"
+      "createdDate": "2024-01-01T00:00:00Z",
+      "modifiedDate": "2024-01-01T00:00:00Z"
     }
   ],
   "page": { "number": 0, "size": 20, "totalElements": 5, "totalPages": 1 }
@@ -405,8 +405,8 @@
       "takeProfitPercent": 0.10
     },
     "initialCapital": 10000000,
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T00:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T00:00:00Z"
   }
 }
 ```
@@ -459,8 +459,8 @@
       "takeProfitPercent": 0.15
     },
     "initialCapital": 20000000,
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-01T01:00:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-01T01:00:00Z"
   }
 }
 ```
@@ -490,7 +490,7 @@
   "data": {
     "agentIdentifier": "uuid",
     "status": "ACTIVE",
-    "updatedAt": "2024-01-01T01:00:00Z"
+    "modifiedDate": "2024-01-01T01:00:00Z"
   }
 }
 ```
@@ -519,7 +519,7 @@
   "data": {
     "agentIdentifier": "uuid",
     "status": "PAUSED",
-    "updatedAt": "2024-01-01T02:00:00Z"
+    "modifiedDate": "2024-01-01T02:00:00Z"
   }
 }
 ```
@@ -549,7 +549,7 @@
   "data": {
     "agentIdentifier": "uuid",
     "status": "ACTIVE",
-    "updatedAt": "2024-01-01T03:00:00Z"
+    "modifiedDate": "2024-01-01T03:00:00Z"
   }
 }
 ```
@@ -578,7 +578,7 @@
   "data": {
     "agentIdentifier": "uuid",
     "status": "TERMINATED",
-    "updatedAt": "2024-01-01T04:00:00Z"
+    "modifiedDate": "2024-01-01T04:00:00Z"
   }
 }
 ```
@@ -621,7 +621,7 @@
         "indicator": "MA_CROSSOVER",
         "details": { "shortMA": 94500000, "longMA": 93000000 }
       },
-      "createdAt": "2024-01-01T09:00:00Z"
+      "createdDate": "2024-01-01T09:00:00Z"
     }
   ],
   "page": { "number": 0, "size": 20, "totalElements": 42, "totalPages": 3 }
@@ -652,8 +652,8 @@
     "cash": 5000000,
     "reservedCash": 500000,
     "realizedPnl": 150000,
-    "createdAt": "2024-01-01T00:00:00Z",
-    "updatedAt": "2024-01-15T12:30:00Z"
+    "createdDate": "2024-01-01T00:00:00Z",
+    "modifiedDate": "2024-01-15T12:30:00Z"
   }
 }
 ```
@@ -685,8 +685,8 @@
       "quantity": 0.05,
       "reservedQuantity": 0,
       "averagePrice": 95000000,
-      "createdAt": "2024-01-01T09:00:00Z",
-      "updatedAt": "2024-01-10T15:00:00Z"
+      "createdDate": "2024-01-01T09:00:00Z",
+      "modifiedDate": "2024-01-10T15:00:00Z"
     }
   ]
 }
@@ -782,7 +782,7 @@
         "longMA": 95300000
       },
       "evaluationReason": null,
-      "createdAt": "2024-01-15T12:00:00Z"
+      "createdDate": "2024-01-15T12:00:00Z"
     }
   ],
   "page": { "number": 0, "size": 20, "totalElements": 500, "totalPages": 25 }
@@ -819,7 +819,7 @@
       "realizedPnl": 2800000,
       "unrealizedPnl": -300000,
       "totalSignals": 15,
-      "createdAt": "2024-06-15T10:00:00Z"
+      "createdDate": "2024-06-15T10:00:00Z"
     }
   ]
 }
@@ -866,7 +866,7 @@
         "reason": { "indicator": "MA_CROSSOVER", "details": { "shortMA": 94500000, "longMA": 93000000 } }
       }
     ],
-    "createdAt": "2024-06-15T10:00:00Z"
+    "createdDate": "2024-06-15T10:00:00Z"
   }
 }
 ```
