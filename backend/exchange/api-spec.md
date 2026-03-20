@@ -19,7 +19,7 @@
 {
   "code": "EX001",
   "message": "Exchange account not found",
-  "timestamp": "2026-03-20T12:00:00+09:00",
+  "timestamp": "2026-03-20T12:00:00Z",
   "path": "/exchange-accounts/...",
   "details": null
 }
@@ -61,8 +61,8 @@ Authorization: Bearer <AccessToken>
     "userIdentifier": "550e8400-e29b-41d4-a716-446655440000",
     "exchange": "UPBIT",
     "status": "ACTIVE",
-    "createdDate": "2026-03-20T12:00:00+09:00",
-    "modifiedDate": "2026-03-20T12:00:00+09:00"
+    "createdDate": "2026-03-20T12:00:00Z",
+    "modifiedDate": "2026-03-20T12:00:00Z"
   }
 }
 ```
@@ -93,8 +93,8 @@ Authorization: Bearer <AccessToken>
       "exchange": "UPBIT",
       "maskedAccessKey": "****a1b2",
       "status": "ACTIVE",
-      "createdDate": "2026-03-20T12:00:00+09:00",
-      "modifiedDate": "2026-03-20T12:00:00+09:00"
+      "createdDate": "2026-03-20T12:00:00Z",
+      "modifiedDate": "2026-03-20T12:00:00Z"
     }
   ]
 }
@@ -122,8 +122,8 @@ Authorization: Bearer <AccessToken>
     "exchange": "UPBIT",
     "maskedAccessKey": "****a1b2",
     "status": "ACTIVE",
-    "createdDate": "2026-03-20T12:00:00+09:00",
-    "modifiedDate": "2026-03-20T12:00:00+09:00"
+    "createdDate": "2026-03-20T12:00:00Z",
+    "modifiedDate": "2026-03-20T12:00:00Z"
   }
 }
 ```

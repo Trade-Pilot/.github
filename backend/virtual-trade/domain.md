@@ -373,8 +373,8 @@ CREATE TABLE virtual_trade_registration (
     user_id     UUID         NOT NULL,
     symbol_ids  JSONB        NOT NULL DEFAULT '[]',  -- List<UUID>
     status      VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    created_date  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    modified_date  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_vtr_user   ON virtual_trade_registration (user_id);
@@ -391,13 +391,13 @@ CREATE TABLE outbox (
     parent_span_id VARCHAR,
     status         VARCHAR NOT NULL DEFAULT 'PENDING',
     retry_count    INT     NOT NULL DEFAULT 0,
-    created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    created_date     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     published_at   TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX outbox_relay_idx ON outbox (created_at)
+CREATE INDEX outbox_relay_idx ON outbox (created_date)
     WHERE status IN ('PENDING', 'FAILED');
-CREATE INDEX outbox_dead_idx ON outbox (created_at)
+CREATE INDEX outbox_dead_idx ON outbox (created_date)
     WHERE status = 'DEAD';
 
 CREATE TABLE processed_events (

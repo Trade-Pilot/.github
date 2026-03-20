@@ -16,7 +16,7 @@
 {
   "code": "U001",
   "message": "User not found",
-  "timestamp": "2026-03-20T12:00:00+09:00",
+  "timestamp": "2026-03-20T12:00:00Z",
   "path": "/users/me",
   "details": null
 }
@@ -197,8 +197,8 @@ Authorization: Bearer <AccessToken>
     "name": "홍길동",
     "role": "USER",
     "status": "ACTIVE",
-    "createdDate": "2026-01-15T10:30:00+09:00",
-    "modifiedDate": "2026-03-20T08:00:00+09:00"
+    "createdDate": "2026-01-15T10:30:00Z",
+    "modifiedDate": "2026-03-20T08:00:00Z"
   }
 }
 ```
@@ -234,8 +234,8 @@ Authorization: Bearer <AccessToken>
     "name": "김철수",
     "role": "USER",
     "status": "ACTIVE",
-    "createdDate": "2026-01-15T10:30:00+09:00",
-    "modifiedDate": "2026-03-20T12:00:00+09:00"
+    "createdDate": "2026-01-15T10:30:00Z",
+    "modifiedDate": "2026-03-20T12:00:00Z"
   }
 }
 ```
@@ -320,8 +320,8 @@ Authorization: Bearer <AccessToken>
     "name": "홍길동",
     "role": "USER",
     "status": "ACTIVE",
-    "createdDate": "2026-01-15T10:30:00+09:00",
-    "modifiedDate": "2026-03-20T08:00:00+09:00"
+    "createdDate": "2026-01-15T10:30:00Z",
+    "modifiedDate": "2026-03-20T08:00:00Z"
   }
 }
 ```

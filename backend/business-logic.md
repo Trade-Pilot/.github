@@ -350,6 +350,17 @@ fun stochastic(
 각 전략은 `StrategyExecutor` 인터페이스를 구현하며, 캔들 데이터만으로 `SignalConditionResult`를 반환한다.
 포지션 사이징, 손절/익절은 `AgentRiskManager`가 별도 처리한다.
 
+### strategyKind ↔ Executor 매핑
+
+| `strategyKind` (StrategyParameters) | Executor 클래스 | 필수 파라미터 |
+|-------------------------------------|-----------------|-------------|
+| `MA_CROSSOVER` | `MovingAverageCrossoverExecutor` | shortPeriod, longPeriod, interval |
+| `RSI` | `RsiExecutor` | period, oversoldThreshold, overboughtThreshold, interval |
+| `BOLLINGER_BREAKOUT` | `BollingerBreakoutExecutor` | period, multiplier, interval |
+
+> `StrategyExecutorFactory.create(strategy)`는 `strategy.parameters.strategyKind`를 기준으로
+> 적절한 Executor 구현체를 반환한다.
+
 ---
 
 ### 2.1 이동평균 크로스오버 (MA Crossover)

@@ -829,8 +829,8 @@ CREATE TABLE trade_registration (
     status               VARCHAR(20)   NOT NULL DEFAULT 'ACTIVE',
     order_config         JSONB         NOT NULL DEFAULT '{}',
     emergency_stopped    BOOLEAN       NOT NULL DEFAULT FALSE,  -- 비상 정지 여부
-    created_at           TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at           TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    created_date           TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    modified_date           TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_tr_user   ON trade_registration (user_id);
@@ -851,11 +851,11 @@ CREATE TABLE trade_order (
     status                 VARCHAR(20)   NOT NULL DEFAULT 'PENDING',
     exchange_order_id      VARCHAR(100),                       -- 거래소 주문 ID
     timeout_at             TIMESTAMPTZ,                        -- LIMIT 주문 자동 취소 기준 시각
-    created_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    created_date             TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    modified_date             TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_order_agent       ON trade_order (agent_id,    created_at DESC);
+CREATE INDEX idx_order_agent       ON trade_order (agent_id,    created_date DESC);
 CREATE INDEX idx_order_status      ON trade_order (status);
 -- 중복 주문 방지: agentIdentifier + symbolIdentifier 기준 active 주문 조회
 CREATE INDEX idx_order_active      ON trade_order (agent_id, symbol_id)
@@ -888,13 +888,13 @@ CREATE TABLE outbox (
     parent_span_id VARCHAR,
     status         VARCHAR NOT NULL DEFAULT 'PENDING',
     retry_count    INT     NOT NULL DEFAULT 0,
-    created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    created_date     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     published_at   TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX outbox_relay_idx ON outbox (created_at)
+CREATE INDEX outbox_relay_idx ON outbox (created_date)
     WHERE status IN ('PENDING', 'FAILED');
-CREATE INDEX outbox_dead_idx ON outbox (created_at)
+CREATE INDEX outbox_dead_idx ON outbox (created_date)
     WHERE status = 'DEAD';
 
 CREATE TABLE processed_events (

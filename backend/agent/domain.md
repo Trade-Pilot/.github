@@ -883,8 +883,8 @@ CREATE TABLE strategy (
     market      VARCHAR(20)  NOT NULL DEFAULT 'COIN',
     status      VARCHAR(20)  NOT NULL DEFAULT 'DRAFT',
     parameters  JSONB        NOT NULL DEFAULT '{}',
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    created_date  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    modified_date TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_strategy_user   ON strategy (user_id);
@@ -900,8 +900,8 @@ CREATE TABLE agent (
     status          VARCHAR(20)   NOT NULL DEFAULT 'INACTIVE',
     risk_config     JSONB         NOT NULL DEFAULT '{}',
     initial_capital NUMERIC(30,8) NOT NULL,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    created_date  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    modified_date TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_agent_user     ON agent (user_id);
@@ -918,11 +918,11 @@ CREATE TABLE signal (
     price              NUMERIC(30,8) NOT NULL,
     suggested_quantity NUMERIC(30,8) NOT NULL,
     reason             JSONB         NOT NULL DEFAULT '{}',
-    created_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    created_date         TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_signal_agent    ON signal (agent_id,    created_at DESC);
-CREATE INDEX idx_signal_strategy ON signal (strategy_id, created_at DESC);
+CREATE INDEX idx_signal_agent    ON signal (agent_id,    created_date DESC);
+CREATE INDEX idx_signal_strategy ON signal (strategy_id, created_date DESC);
 
 CREATE TABLE portfolio (
     id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -931,7 +931,7 @@ CREATE TABLE portfolio (
     cash            NUMERIC(30,8) NOT NULL,          -- 실제 보유 현금 (체결 완료 기준)
     reserved_cash   NUMERIC(30,8) NOT NULL DEFAULT 0, -- BUY 신호 점유 현금 (체결 전)
     realized_pnl    NUMERIC(30,8) NOT NULL DEFAULT 0, -- 누적 실현손익
-    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    created_date      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
@@ -962,7 +962,7 @@ CREATE TABLE position (
     quantity          NUMERIC(30,8) NOT NULL,           -- 실제 보유 수량 (체결 완료 기준)
     reserved_quantity NUMERIC(30,8) NOT NULL DEFAULT 0, -- SELL 신호 점유 수량 (체결 전)
     average_price     NUMERIC(30,8) NOT NULL,
-    created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    created_date        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     UNIQUE (portfolio_id, symbol_id)
 );
@@ -979,10 +979,10 @@ CREATE TABLE backtest_result (
     unrealized_pnl    NUMERIC(30,8) NOT NULL,
     total_signals     INT           NOT NULL DEFAULT 0,
     signal_snapshots  JSONB         NOT NULL DEFAULT '[]',
-    created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    created_date        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_backtest_result_agent ON backtest_result (agent_id, created_at DESC);
+CREATE INDEX idx_backtest_result_agent ON backtest_result (agent_id, created_date DESC);
 
 CREATE TABLE strategy_decision_log (
     id               UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -994,11 +994,11 @@ CREATE TABLE strategy_decision_log (
     indicator_values JSONB         NOT NULL DEFAULT '{}',
     evaluation_status VARCHAR(20)  NOT NULL,
     evaluation_reason TEXT,
-    created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    created_date       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 -- 최신 로그 조회 및 특정 기간 데이터 삭제 최적화
-CREATE INDEX idx_decision_log_agent_time ON strategy_decision_log (agent_id, created_at DESC);
+CREATE INDEX idx_decision_log_agent_time ON strategy_decision_log (agent_id, created_date DESC);
 
 CREATE TABLE outbox (
     id             UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1010,13 +1010,13 @@ CREATE TABLE outbox (
     parent_span_id VARCHAR,
     status         VARCHAR NOT NULL DEFAULT 'PENDING',
     retry_count    INT     NOT NULL DEFAULT 0,
-    created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    created_date     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     published_at   TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX outbox_relay_idx ON outbox (created_at)
+CREATE INDEX outbox_relay_idx ON outbox (created_date)
     WHERE status IN ('PENDING', 'FAILED');
-CREATE INDEX outbox_dead_idx ON outbox (created_at)
+CREATE INDEX outbox_dead_idx ON outbox (created_date)
     WHERE status = 'DEAD';
 
 CREATE TABLE processed_events (

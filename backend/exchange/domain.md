@@ -351,8 +351,8 @@ CREATE TABLE exchange_account (
     encrypted_access_key TEXT       NOT NULL,
     encrypted_secret_key TEXT       NOT NULL,
     status              VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-    created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    created_date        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    modified_date       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_ea_user   ON exchange_account (user_id);

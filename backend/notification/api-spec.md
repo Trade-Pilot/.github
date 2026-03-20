@@ -33,7 +33,7 @@ Authorization: Bearer <AccessToken>
 {
   "code": "N001",
   "message": "Notification channel not found",
-  "timestamp": "2026-03-20T12:00:00+09:00",
+  "timestamp": "2026-03-20T12:00:00Z",
   "path": "/notification-channels/...",
   "details": null
 }
@@ -83,8 +83,8 @@ Authorization: Bearer <AccessToken>
       "webhookUrl": "https://discord.com/api/webhooks/1234567890/abcdefg"
     },
     "isActive": true,
-    "createdDate": "2026-03-20T12:00:00+09:00",
-    "modifiedDate": "2026-03-20T12:00:00+09:00"
+    "createdDate": "2026-03-20T12:00:00Z",
+    "modifiedDate": "2026-03-20T12:00:00Z"
   }
 }
 ```
@@ -116,8 +116,8 @@ Authorization: Bearer <AccessToken>
         "webhookUrl": "https://discord.com/api/webhooks/1234567890/abcdefg"
       },
       "isActive": true,
-      "createdDate": "2026-03-20T12:00:00+09:00",
-      "modifiedDate": "2026-03-20T12:00:00+09:00"
+      "createdDate": "2026-03-20T12:00:00Z",
+      "modifiedDate": "2026-03-20T12:00:00Z"
     }
   ]
 }
@@ -143,7 +143,7 @@ Authorization: Bearer <AccessToken>
   "data": {
     "channelIdentifier": "550e8400-e29b-41d4-a716-446655440000",
     "isActive": true,
-    "modifiedDate": "2026-03-20T12:30:00+09:00"
+    "modifiedDate": "2026-03-20T12:30:00Z"
   }
 }
 ```
@@ -175,7 +175,7 @@ Authorization: Bearer <AccessToken>
   "data": {
     "channelIdentifier": "550e8400-e29b-41d4-a716-446655440000",
     "isActive": false,
-    "modifiedDate": "2026-03-20T12:30:00+09:00"
+    "modifiedDate": "2026-03-20T12:30:00Z"
   }
 }
 ```
@@ -289,7 +289,7 @@ Authorization: Bearer <AccessToken>
     "channelIdentifiers": [
       "550e8400-e29b-41d4-a716-446655440000"
     ],
-    "modifiedDate": "2026-03-20T13:00:00+09:00"
+    "modifiedDate": "2026-03-20T13:00:00Z"
   }
 }
 ```
@@ -330,8 +330,8 @@ Authorization: Bearer <AccessToken>
       "status": "SENT",
       "failureReason": null,
       "retryCount": 0,
-      "createdDate": "2026-03-20T14:00:00+09:00",
-      "sentAt": "2026-03-20T14:00:01+09:00"
+      "createdDate": "2026-03-20T14:00:00Z",
+      "sentAt": "2026-03-20T14:00:01Z"
     }
   ],
   "page": {
@@ -364,8 +364,8 @@ Authorization: Bearer <AccessToken>
       "titleTemplate": "[가상거래] 주문 체결",
       "bodyTemplate": "${symbol} ${side} ${quantity}개 @ ${price}원",
       "isActive": true,
-      "createdDate": "2026-01-15T10:00:00+09:00",
-      "modifiedDate": "2026-03-20T08:00:00+09:00"
+      "createdDate": "2026-01-15T10:00:00Z",
+      "modifiedDate": "2026-03-20T08:00:00Z"
     }
   ]
 }
@@ -405,8 +405,8 @@ Authorization: Bearer <AccessToken>
     "titleTemplate": "[가상거래] 주문 체결",
     "bodyTemplate": "${symbol} ${side} ${quantity}개 @ ${price}원",
     "isActive": true,
-    "createdDate": "2026-03-20T15:00:00+09:00",
-    "modifiedDate": "2026-03-20T15:00:00+09:00"
+    "createdDate": "2026-03-20T15:00:00Z",
+    "modifiedDate": "2026-03-20T15:00:00Z"
   }
 }
 ```
@@ -449,8 +449,8 @@ Authorization: Bearer <AccessToken>
     "titleTemplate": "[가상거래] 주문 체결 완료",
     "bodyTemplate": "${symbol} ${side} ${quantity}개 @ ${price}원 체결되었습니다.",
     "isActive": true,
-    "createdDate": "2026-01-15T10:00:00+09:00",
-    "modifiedDate": "2026-03-20T15:30:00+09:00"
+    "createdDate": "2026-01-15T10:00:00Z",
+    "modifiedDate": "2026-03-20T15:30:00Z"
   }
 }
 ```

@@ -27,7 +27,7 @@
 {
   "code": "MS001",
   "message": "Market symbol not found",
-  "timestamp": "2026-03-20T12:00:00+09:00",
+  "timestamp": "2026-03-20T12:00:00Z",
   "path": "/market-symbols/...",
   "details": null
 }
@@ -93,8 +93,8 @@ Authorization: Bearer <AccessToken>
       "name": "비트코인",
       "market": "COIN",
       "status": "LISTED",
-      "createdDate": "2026-01-01T00:00:00+09:00",
-      "modifiedDate": "2026-03-20T08:00:00+09:00"
+      "createdDate": "2026-01-01T00:00:00Z",
+      "modifiedDate": "2026-03-20T08:00:00Z"
     },
     {
       "symbolIdentifier": "770e8400-e29b-41d4-a716-446655440001",
@@ -102,8 +102,8 @@ Authorization: Bearer <AccessToken>
       "name": "이더리움",
       "market": "COIN",
       "status": "LISTED",
-      "createdDate": "2026-01-01T00:00:00+09:00",
-      "modifiedDate": "2026-03-20T08:00:00+09:00"
+      "createdDate": "2026-01-01T00:00:00Z",
+      "modifiedDate": "2026-03-20T08:00:00Z"
     }
   ],
   "page": {
@@ -135,8 +135,8 @@ Authorization: Bearer <AccessToken>
     "name": "비트코인",
     "market": "COIN",
     "status": "LISTED",
-    "createdDate": "2026-01-01T00:00:00+09:00",
-    "modifiedDate": "2026-03-20T08:00:00+09:00"
+    "createdDate": "2026-01-01T00:00:00Z",
+    "modifiedDate": "2026-03-20T08:00:00Z"
   }
 }
 ```
@@ -173,9 +173,9 @@ Authorization: Bearer <AccessToken>
       "interval": "MIN_1",
       "status": "COLLECTED",
       "retryCount": 0,
-      "lastCollectedTime": "2026-03-20T11:59:00+09:00",
+      "lastCollectedTime": "2026-03-20T11:59:00Z",
       "lastCollectedPrice": "95000000",
-      "createdDate": "2026-01-01T00:00:00+09:00"
+      "createdDate": "2026-01-01T00:00:00Z"
     },
     {
       "taskIdentifier": "880e8400-e29b-41d4-a716-446655440001",
@@ -183,9 +183,9 @@ Authorization: Bearer <AccessToken>
       "interval": "MIN_5",
       "status": "ERROR",
       "retryCount": 2,
-      "lastCollectedTime": "2026-03-20T11:55:00+09:00",
+      "lastCollectedTime": "2026-03-20T11:55:00Z",
       "lastCollectedPrice": "94800000",
-      "createdDate": "2026-01-01T00:00:00+09:00"
+      "createdDate": "2026-01-01T00:00:00Z"
     }
   ],
   "page": {
@@ -326,7 +326,7 @@ Authorization: Bearer <AccessToken>
     {
       "symbolIdentifier": "770e8400-e29b-41d4-a716-446655440000",
       "interval": "MIN_1",
-      "time": "2026-03-20T11:59:00+09:00",
+      "time": "2026-03-20T11:59:00Z",
       "open": "95000000",
       "high": "95100000",
       "low": "94900000",
@@ -337,7 +337,7 @@ Authorization: Bearer <AccessToken>
     {
       "symbolIdentifier": "770e8400-e29b-41d4-a716-446655440000",
       "interval": "MIN_1",
-      "time": "2026-03-20T11:58:00+09:00",
+      "time": "2026-03-20T11:58:00Z",
       "open": "94800000",
       "high": "95050000",
       "low": "94750000",
