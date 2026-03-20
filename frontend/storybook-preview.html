@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trade Pilot — Storybook Component Preview</title>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+
+    /* ══════════════════ 라이트 테마 ══════════════════ */
+    :root, [data-theme="light"] {
+      --bg-base:    #F2F1FF;
+      --bg-surface: #FFFFFF;
+      --bg-elevated:#EEEAFF;
+      --bg-input:   #F8F7FF;
+      --bg-overlay: #E9E6FF;
+      --text-primary:   #18162E;
+      --text-secondary: #4D4975;
+      --text-tertiary:  #8C88B0;
+      --text-disabled:  #C0BDE0;
+      --border:       #E4E1F8;
+      --border-strong:#CECCF0;
+      --shadow: 0 0 0 1px rgba(206,204,240,0.8), 0 8px 24px rgba(90,80,180,0.10);
+    }
+
+    /* ══════════════════ 다크 테마 ══════════════════ */
+    [data-theme="dark"] {
+      --bg-base:    #12111A;
+      --bg-surface: #1C1B2E;
+      --bg-elevated:#252440;
+      --bg-input:   #181728;
+      --bg-overlay: #2D2C4A;
+      --text-primary:   #EEEDF8;
+      --text-secondary: #9490B5;
+      --text-tertiary:  #615D82;
+      --text-disabled:  #403D5E;
+      --border:       #252440;
+      --border-strong:#333063;
+      --shadow: 0 0 0 1px rgba(124,110,245,0.08), 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    :root {
+      --brand-50:  #F0EEFF; --brand-100: #DDD8FC;
+      --brand-400: #A99AF8; --brand-500: #7C6EF5;
+      --brand-600: #6557E8; --brand-700: #5143CF;
+      --success: #06C270; --warning: #F5A623; --danger: #F04452;
+      --info: #4A90E2;
+      --up: #F04452; --down: #4066E4;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg-base); color: var(--text-primary);
+      font-family: 'Pretendard Variable', 'Pretendard', -apple-system, sans-serif;
+      transition: background 0.25s ease, color 0.25s ease;
+    }
+    body { padding: 32px; min-height: 100vh; max-width: 1400px; margin: 0 auto; }
+
+    /* ── 헤더 ── */
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { font-size: 14px; color: var(--text-secondary); }
+
+    /* ── 테마 토글 ── */
+    .theme-switcher {
+      display: flex; gap: 8px; background: var(--bg-surface);
+      border: 1px solid var(--border-strong); border-radius: 100px; padding: 4px;
+    }
+    .theme-btn {
+      padding: 6px 14px; border-radius: 100px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: none; background: transparent;
+      color: var(--text-secondary); transition: all 0.2s;
+    }
+    .theme-btn.active { background: var(--brand-500); color: #fff; }
+    .theme-btn:not(.active):hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+    /* ── 섹션 ── */
+    section { margin-bottom: 48px; }
+    h2 {
+      font-size: 11px; font-weight: 600; color: var(--text-secondary);
+      letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+    .col { display: flex; flex-direction: column; gap: 8px; }
+    .label { font-size: 11px; color: var(--text-tertiary); margin-bottom: 4px; }
+    .card {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px; box-shadow: var(--shadow);
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    /* ══════════════════ 컴포넌트 스타일 ══════════════════ */
+
+    /* ── Button ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border: none; border-radius: 8px; font-weight: 500; cursor: pointer;
+      transition: all 0.15s; font-family: inherit; white-space: nowrap;
+    }
+    .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+    .btn-md { height: 36px; padding: 0 14px; font-size: 14px; }
+    .btn-lg { height: 44px; padding: 0 20px; font-size: 15px; }
+    .btn-primary { background: var(--brand-500); color: #fff; }
+    .btn-primary:hover { background: var(--brand-600); }
+    .btn-secondary {
+      background: var(--bg-surface); color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+    }
+    .btn-secondary:hover { background: var(--bg-elevated); border-color: var(--brand-400); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { opacity: 0.9; }
+    .btn-ghost { background: transparent; color: var(--text-secondary); }
+    .btn-ghost:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .btn:disabled, .btn.disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 10px; border-radius: 100px; font-size: 12px; font-weight: 500;
+    }
+    .badge-dot::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      display: inline-block; background: currentColor;
+    }
+    .badge-default  { background: var(--bg-elevated); color: var(--text-secondary); }
+    .badge-success  { background: rgba(6,194,112,0.12); color: var(--success); }
+    .badge-error    { background: rgba(240,68,82,0.12); color: var(--danger); }
+    .badge-warning  { background: rgba(245,166,35,0.12); color: var(--warning); }
+    .badge-info     { background: rgba(74,144,226,0.12); color: var(--info); }
+    .badge-neutral  { background: var(--bg-surface); color: var(--text-tertiary); }
+
+    /* ── Input ── */
+    .input-group { display: flex; flex-direction: column; gap: 4px; }
+    .input-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+    .input {
+      height: 36px; padding: 0 12px; border-radius: 8px; font-size: 14px;
+      background: var(--bg-input); border: 1px solid var(--border);
+      color: var(--text-primary); outline: none; font-family: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .input::placeholder { color: var(--text-tertiary); }
+    .input:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px rgba(124,110,245,0.15); }
+    .input-error { border-color: var(--danger) !important; }
+    .input-error:focus { box-shadow: 0 0 0 3px rgba(240,68,82,0.15); }
+    .error-msg { font-size: 12px; color: var(--danger); }
+
+    /* ── Spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      border: 2px solid var(--border); border-top-color: var(--brand-500);
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+    .spinner-sm { width: 16px; height: 16px; }
+    .spinner-md { width: 24px; height: 24px; }
+    .spinner-lg { width: 36px; height: 36px; }
+
+    /* ── Skeleton ── */
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .skeleton {
+      background: var(--bg-elevated); border-radius: 6px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; border-radius: 10px; font-size: 13px;
+      border: 1px solid; min-width: 280px; box-shadow: var(--shadow);
+    }
+    .toast-success { background: rgba(6,194,112,0.08); border-color: rgba(6,194,112,0.3); color: var(--success); }
+    .toast-error   { background: rgba(240,68,82,0.08); border-color: rgba(240,68,82,0.3); color: var(--danger); }
+    .toast-info    { background: rgba(74,144,226,0.08); border-color: rgba(74,144,226,0.3); color: var(--info); }
+    .toast-warning { background: rgba(245,166,35,0.08); border-color: rgba(245,166,35,0.3); color: var(--warning); }
+    .toast-icon { font-size: 16px; }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(4px); z-index: 100; opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .modal-backdrop.open { opacity: 1; pointer-events: auto; }
+    .modal {
+      background: var(--bg-surface); border: 1px solid var(--border-strong);
+      border-radius: 16px; padding: 24px; width: 420px; max-width: 90vw;
+      box-shadow: var(--shadow); transform: translateY(20px); transition: transform 0.2s;
+    }
+    .modal-backdrop.open .modal { transform: translateY(0); }
+    .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+    .modal-body { font-size: 14px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; }
+
+    /* ── Table ── */
+    .table-wrap { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 600;
+      color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;
+      background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+    }
+    tbody td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+    tbody tr { transition: background 0.1s; }
+    tbody tr:hover { background: var(--bg-elevated); }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* ── EmptyState ── */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 48px; gap: 12px; text-align: center;
+    }
+    .empty-icon { font-size: 40px; color: var(--text-disabled); }
+    .empty-title { font-size: 15px; font-weight: 600; }
+    .empty-desc { font-size: 13px; color: var(--text-tertiary); max-width: 280px; }
+
+    /* ══════════════════ 위젯 스타일 ══════════════════ */
+
+    /* ── AgentCard ── */
+    .agent-card {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px; width: 280px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .agent-card:hover { border-color: var(--brand-400); box-shadow: var(--shadow); }
+    .agent-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .agent-name { font-size: 15px; font-weight: 600; }
+    .agent-strategy { font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px; }
+    .agent-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .agent-stat-label { font-size: 11px; color: var(--text-tertiary); }
+    .agent-stat-value { font-size: 14px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+    .pnl-positive { color: var(--up); }
+    .pnl-negative { color: var(--down); }
+
+    /* ── PortfolioSummary ── */
+    .portfolio-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 12px 0; }
+    .bar-cash { background: var(--brand-500); }
+    .bar-reserved { background: var(--warning); }
+    .bar-position { background: var(--success); }
+    .portfolio-legend { display: flex; gap: 16px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    /* ── Candle ── */
+    .candle-container {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; position: relative;
+    }
+    .candle-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+    }
+    .candle-symbol { font-size: 15px; font-weight: 600; }
+    .candle-price { font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+    .candle-chart-area {
+      height: 240px; padding: 16px; display: flex; align-items: flex-end;
+      gap: 3px; position: relative;
+    }
+    .candle-stick {
+      display: flex; flex-direction: column; align-items: center; flex: 1; position: relative;
+    }
+    .candle-wick { width: 1px; }
+    .candle-body { width: 70%; border-radius: 1px; min-height: 2px; }
+    .candle-up .candle-wick { background: var(--up); }
+    .candle-up .candle-body { background: var(--up); }
+    .candle-down .candle-wick { background: var(--down); }
+    .candle-down .candle-body { background: var(--down); }
+    .candle-overlay {
+      position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; background: rgba(18,17,26,0.7); backdrop-filter: blur(2px);
+      font-size: 14px; color: var(--text-secondary); border-radius: 0 0 12px 12px;
+    }
+    .ma-line {
+      position: absolute; bottom: 16px; left: 16px; right: 16px; height: 1px;
+      pointer-events: none;
+    }
+    .signal-marker {
+      position: absolute; font-size: 10px; font-weight: 700;
+      width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
+    }
+    .signal-buy { color: var(--up); bottom: 10px; }
+    .signal-sell { color: var(--down); top: 10px; }
+
+    /* ── OrderBook ── */
+    .order-status { display: flex; align-items: center; gap: 6px; }
+    .fill-bar { height: 4px; border-radius: 2px; background: var(--bg-elevated); flex: 1; max-width: 60px; }
+    .fill-bar-inner { height: 100%; border-radius: 2px; background: var(--brand-500); transition: width 0.3s; }
+
+    /* ── EmergencyStop ── */
+    .emergency-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: 12px; font-size: 15px; font-weight: 700;
+      border: 2px solid var(--danger); background: rgba(240,68,82,0.1);
+      color: var(--danger); cursor: pointer; transition: all 0.15s;
+      animation: pulse-border 2s infinite;
+    }
+    .emergency-btn:hover { background: var(--danger); color: #fff; }
+    @keyframes pulse-border {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(240,68,82,0.4); }
+      50% { box-shadow: 0 0 0 6px rgba(240,68,82,0); }
+    }
+
+    /* ── Progress ── */
+    .progress-wrap { width: 100%; }
+    .progress-bar { height: 8px; border-radius: 4px; background: var(--bg-elevated); overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 4px; background: var(--brand-500); transition: width 0.5s ease; }
+    .progress-label { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text-tertiary); }
+
+    /* ── Health ── */
+    .health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .health-card {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .health-name { font-size: 13px; font-weight: 500; }
+    .health-status { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+    .health-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .health-dot.up { background: var(--success); }
+    .health-dot.down { background: var(--danger); animation: blink 1s infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .health-meta { font-size: 11px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; }
+
+    /* ── Notification Badge ── */
+    .notif-badge-wrap { position: relative; display: inline-flex; }
+    .notif-icon { font-size: 20px; cursor: pointer; color: var(--text-secondary); }
+    .notif-count {
+      position: absolute; top: -4px; right: -6px; min-width: 16px; height: 16px;
+      background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
+      border-radius: 100px; display: flex; align-items: center; justify-content: center;
+      padding: 0 4px;
+    }
+
+    /* ── DualBalance ── */
+    .dual-balance { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start; }
+    .balance-col { display: flex; flex-direction: column; gap: 6px; }
+    .balance-title { font-size: 11px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; }
+    .balance-amount { font-size: 18px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .balance-divider { width: 1px; background: var(--border); align-self: stretch; }
+    .drift-indicator {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 500;
+      background: rgba(245,166,35,0.1); color: var(--warning);
+    }
+
+    /* ── Tabs (Section Nav) ── */
+    .section-tabs {
+      display: flex; gap: 4px; margin-bottom: 32px; background: var(--bg-surface);
+      padding: 4px; border-radius: 10px; border: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .section-tab {
+      padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: none; background: transparent;
+      color: var(--text-secondary); transition: all 0.15s; white-space: nowrap;
+    }
+    .section-tab.active { background: var(--brand-500); color: #fff; }
+    .section-tab:not(.active):hover { background: var(--bg-elevated); }
+
+    .section-content { display: none; }
+    .section-content.active { display: block; }
+  </style>
+</head>
+<body>
+
+  <!-- ── 헤더 ── -->
+  <div class="header">
+    <div>
+      <h1>Trade Pilot — Storybook Preview</h1>
+      <div class="subtitle">25개 컴포넌트 · ~100개 스토리 · shared / widgets / features</div>
+    </div>
+    <div class="theme-switcher">
+      <button class="theme-btn active" data-theme="dark">🌙 Dark</button>
+      <button class="theme-btn" data-theme="light">☀️ Light</button>
+    </div>
+  </div>
+
+  <!-- ── 섹션 네비게이션 ── -->
+  <div class="section-tabs">
+    <button class="section-tab active" data-section="shared">shared/ui</button>
+    <button class="section-tab" data-section="widgets">widgets</button>
+    <button class="section-tab" data-section="features">features</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- SHARED/UI -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="section-content active" id="section-shared">
+
+    <!-- Button -->
+    <section>
+      <h2>Button</h2>
+      <h3>Variants</h3>
+      <div class="row">
+        <button class="btn btn-md btn-primary">Primary</button>
+        <button class="btn btn-md btn-secondary">Secondary</button>
+        <button class="btn btn-md btn-danger">Danger</button>
+        <button class="btn btn-md btn-ghost">Ghost</button>
+      </div>
+      <h3>Sizes</h3>
+      <div class="row">
+        <button class="btn btn-sm btn-primary">Small</button>
+        <button class="btn btn-md btn-primary">Medium</button>
+        <button class="btn btn-lg btn-primary">Large</button>
+      </div>
+      <h3>States</h3>
+      <div class="row">
+        <button class="btn btn-md btn-primary">
+          <span class="spinner spinner-sm" style="border-top-color:#fff;border-color:rgba(255,255,255,0.3);"></span>
+          저장 중...
+        </button>
+        <button class="btn btn-md btn-primary disabled" disabled>비활성</button>
+        <button class="btn btn-md btn-secondary">⟳ 새로고침</button>
+        <button class="btn btn-md btn-danger">⊗ 삭제</button>
+      </div>
+    </section>
+
+    <!-- Badge -->
+    <section>
+      <h2>Badge</h2>
+      <h3>Variants</h3>
+      <div class="row">
+        <span class="badge badge-default">Default</span>
+        <span class="badge badge-success badge-dot">Success</span>
+        <span class="badge badge-error badge-dot">Error</span>
+        <span class="badge badge-warning badge-dot">Warning</span>
+        <span class="badge badge-info badge-dot">Info</span>
+        <span class="badge badge-neutral">Neutral</span>
+      </div>
+      <h3>StatusBadge (수집 상태)</h3>
+      <div class="row">
+        <span class="badge badge-neutral badge-dot">대기</span>
+        <span class="badge badge-info badge-dot">수집중</span>
+        <span class="badge badge-success badge-dot">완료</span>
+        <span class="badge badge-error badge-dot">오류 (2/3)</span>
+        <span class="badge badge-warning badge-dot">정지</span>
+        <span class="badge badge-neutral badge-dot">폐지</span>
+      </div>
+    </section>
+
+    <!-- Input -->
+    <section>
+      <h2>Input</h2>
+      <div class="grid-3">
+        <div class="input-group">
+          <label class="input-label">이메일</label>
+          <input class="input" type="email" placeholder="email@example.com" />
+        </div>
+        <div class="input-group">
+          <label class="input-label">비밀번호</label>
+          <input class="input" type="password" value="password123" />
+        </div>
+        <div class="input-group">
+          <label class="input-label">이메일 (에러)</label>
+          <input class="input input-error" type="email" value="invalid-email" />
+          <span class="error-msg">이메일 형식이 올바르지 않습니다</span>
+        </div>
+        <div class="input-group">
+          <label class="input-label">심볼 검색</label>
+          <input class="input" type="text" placeholder="🔍 KRW-BTC..." />
+        </div>
+        <div class="input-group">
+          <label class="input-label">비활성</label>
+          <input class="input" type="text" value="수정 불가" disabled style="opacity:0.5;" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Spinner & Skeleton -->
+    <section>
+      <h2>Spinner / Skeleton</h2>
+      <div class="grid-2">
+        <div>
+          <h3>Spinner Sizes</h3>
+          <div class="row">
+            <div class="spinner spinner-sm"></div>
+            <div class="spinner spinner-md"></div>
+            <div class="spinner spinner-lg"></div>
+          </div>
+        </div>
+        <div>
+          <h3>Skeleton</h3>
+          <div class="col" style="gap:8px;">
+            <div class="skeleton" style="height:14px; width:60%;"></div>
+            <div class="skeleton" style="height:14px; width:80%;"></div>
+            <div class="skeleton" style="height:14px; width:45%;"></div>
+            <div class="skeleton" style="height:32px; width:100%; margin-top:8px; border-radius:8px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Toast -->
+    <section>
+      <h2>Toast</h2>
+      <div class="col" style="gap:10px; max-width:400px;">
+        <div class="toast toast-success"><span class="toast-icon">✓</span> 전체 수집 작업이 재시작되었습니다.</div>
+        <div class="toast toast-error"><span class="toast-icon">✕</span> 오류가 발생했습니다: API 연결 실패</div>
+        <div class="toast toast-info"><span class="toast-icon">ℹ</span> 수집이 시작되었습니다.</div>
+        <div class="toast toast-warning"><span class="toast-icon">⚠</span> 일부 작업을 일시정지했습니다.</div>
+      </div>
+    </section>
+
+    <!-- EmptyState -->
+    <section>
+      <h2>EmptyState</h2>
+      <div class="card">
+        <div class="empty-state">
+          <div class="empty-icon">📦</div>
+          <div class="empty-title">수집된 데이터가 없습니다</div>
+          <div class="empty-desc">필터 조건을 변경하거나 수집을 시작해주세요.</div>
+          <button class="btn btn-md btn-primary" style="margin-top:8px;">수집 시작</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Table -->
+    <section>
+      <h2>Table</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>심볼</th>
+              <th>상태</th>
+              <th>마지막 수집</th>
+              <th>재시도</th>
+              <th>액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:600;">KRW-BTC</td>
+              <td><span class="badge badge-success badge-dot">완료</span></td>
+              <td style="color:var(--text-secondary); font-family:'JetBrains Mono',monospace; font-size:12px;">2026-03-20 18:00</td>
+              <td style="font-family:'JetBrains Mono',monospace;">0</td>
+              <td><button class="btn btn-sm btn-ghost">일시정지</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight:600;">KRW-ETH</td>
+              <td><span class="badge badge-info badge-dot">수집중</span></td>
+              <td style="color:var(--text-secondary); font-family:'JetBrains Mono',monospace; font-size:12px;">2026-03-20 17:59</td>
+              <td style="font-family:'JetBrains Mono',monospace;">0</td>
+              <td><button class="btn btn-sm btn-ghost">일시정지</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight:600;">KRW-XRP</td>
+              <td><span class="badge badge-error badge-dot">오류 (2/3)</span></td>
+              <td style="color:var(--text-secondary); font-family:'JetBrains Mono',monospace; font-size:12px;">2026-03-20 17:55</td>
+              <td style="font-family:'JetBrains Mono',monospace; color:var(--danger);">2</td>
+              <td><button class="btn btn-sm btn-primary">재시작</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight:600;">KRW-SOL</td>
+              <td><span class="badge badge-warning badge-dot">정지</span></td>
+              <td style="color:var(--text-secondary); font-family:'JetBrains Mono',monospace; font-size:12px;">2026-03-20 15:30</td>
+              <td style="font-family:'JetBrains Mono',monospace;">0</td>
+              <td><button class="btn btn-sm btn-primary">재시작</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Modal -->
+    <section>
+      <h2>Modal</h2>
+      <div class="row">
+        <button class="btn btn-md btn-secondary" onclick="document.getElementById('modal-default').classList.add('open')">기본 모달</button>
+        <button class="btn btn-md btn-danger" onclick="document.getElementById('modal-danger').classList.add('open')">삭제 확인 모달</button>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- WIDGETS -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="section-content" id="section-widgets">
+
+    <!-- CandleChart -->
+    <section>
+      <h2>CandleChart</h2>
+      <div class="grid-2">
+        <div>
+          <h3>기본 (KRW-BTC)</h3>
+          <div class="candle-container">
+            <div class="candle-header">
+              <span class="candle-symbol">KRW-BTC</span>
+              <span class="candle-price" style="color:var(--up);">50,150,000 <span style="font-size:11px;">+0.3%</span></span>
+            </div>
+            <div class="candle-chart-area" id="candle-chart-1">
+              <!-- MA 라인 -->
+              <svg class="ma-line" style="height:100%;width:100%;position:absolute;left:0;top:0;">
+                <polyline fill="none" stroke="#4A90E2" stroke-width="1.5" opacity="0.7" id="ma-short" />
+                <polyline fill="none" stroke="#F5A623" stroke-width="1.5" opacity="0.7" id="ma-long" />
+              </svg>
+            </div>
+            <!-- Legend -->
+            <div style="padding:8px 16px 12px; display:flex; gap:16px; font-size:11px; color:var(--text-tertiary);">
+              <span style="display:flex;align-items:center;gap:4px;"><span style="width:12px;height:2px;background:#4A90E2;display:inline-block;"></span> MA(20)</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="width:12px;height:2px;background:#F5A623;display:inline-block;"></span> MA(60)</span>
+              <span style="display:flex;align-items:center;gap:4px;color:var(--up);">▲ BUY</span>
+              <span style="display:flex;align-items:center;gap:4px;color:var(--down);">▼ SELL</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h3>Stale Data 경고</h3>
+          <div class="candle-container">
+            <div class="candle-header">
+              <span class="candle-symbol">KRW-ETH</span>
+              <span class="candle-price" style="color:var(--text-tertiary);">3,450,000</span>
+            </div>
+            <div class="candle-chart-area" id="candle-chart-2" style="filter: grayscale(1); opacity:0.5;">
+            </div>
+            <div class="candle-overlay">⚠ 연결 지연으로 데이터 업데이트가 중단됨</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AgentCard -->
+    <section>
+      <h2>AgentCard</h2>
+      <div class="row" style="align-items:stretch;">
+        <!-- Active -->
+        <div class="agent-card">
+          <div class="agent-card-header">
+            <span class="agent-name">BTC 모멘텀봇</span>
+            <span class="badge badge-success badge-dot">ACTIVE</span>
+          </div>
+          <div class="agent-strategy">MA Crossover · KRW-BTC</div>
+          <div class="agent-stats">
+            <div><div class="agent-stat-label">총 자산</div><div class="agent-stat-value">₩2,500,000</div></div>
+            <div><div class="agent-stat-label">실현손익</div><div class="agent-stat-value pnl-positive">+₩150,000</div></div>
+            <div><div class="agent-stat-label">승률</div><div class="agent-stat-value">62.5%</div></div>
+            <div><div class="agent-stat-label">신호</div><div class="agent-stat-value">24건</div></div>
+          </div>
+        </div>
+        <!-- Paused -->
+        <div class="agent-card" style="opacity:0.7;">
+          <div class="agent-card-header">
+            <span class="agent-name">ETH RSI봇</span>
+            <span class="badge badge-warning badge-dot">PAUSED</span>
+          </div>
+          <div class="agent-strategy">RSI · KRW-ETH</div>
+          <div class="agent-stats">
+            <div><div class="agent-stat-label">총 자산</div><div class="agent-stat-value">₩1,800,000</div></div>
+            <div><div class="agent-stat-label">실현손익</div><div class="agent-stat-value pnl-negative">-₩30,000</div></div>
+            <div><div class="agent-stat-label">승률</div><div class="agent-stat-value">45.0%</div></div>
+            <div><div class="agent-stat-label">신호</div><div class="agent-stat-value">12건</div></div>
+          </div>
+        </div>
+        <!-- Terminated -->
+        <div class="agent-card" style="opacity:0.4;">
+          <div class="agent-card-header">
+            <span class="agent-name">SOL 볼린저봇</span>
+            <span class="badge badge-neutral">TERMINATED</span>
+          </div>
+          <div class="agent-strategy">Bollinger · KRW-SOL</div>
+          <div class="agent-stats">
+            <div><div class="agent-stat-label">총 자산</div><div class="agent-stat-value">₩0</div></div>
+            <div><div class="agent-stat-label">실현손익</div><div class="agent-stat-value">₩0</div></div>
+            <div><div class="agent-stat-label">승률</div><div class="agent-stat-value">—</div></div>
+            <div><div class="agent-stat-label">신호</div><div class="agent-stat-value">0건</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PortfolioSummary -->
+    <section>
+      <h2>PortfolioSummary</h2>
+      <div class="card" style="max-width:500px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-size:13px;color:var(--text-secondary);">총 자산</span>
+          <span style="font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace;">₩2,500,000</span>
+        </div>
+        <div class="portfolio-bar">
+          <div class="bar-cash" style="width:40%;"></div>
+          <div class="bar-reserved" style="width:20%;"></div>
+          <div class="bar-position" style="width:40%;"></div>
+        </div>
+        <div class="portfolio-legend">
+          <span class="legend-item"><span class="legend-dot" style="background:var(--brand-500);"></span> 가용 현금 ₩1,000,000</span>
+          <span class="legend-item"><span class="legend-dot" style="background:var(--warning);"></span> 주문 대기 ₩500,000</span>
+          <span class="legend-item"><span class="legend-dot" style="background:var(--success);"></span> 포지션 ₩1,000,000</span>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:24px;">
+          <div><div class="agent-stat-label">실현손익</div><div class="agent-stat-value pnl-positive">+₩150,000 (+6.0%)</div></div>
+          <div><div class="agent-stat-label">미실현손익</div><div class="agent-stat-value pnl-positive">+₩25,000 (+2.5%)</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DualBalanceView -->
+    <section>
+      <h2>DualBalanceView</h2>
+      <div class="card" style="max-width:600px;">
+        <div class="dual-balance">
+          <div class="balance-col">
+            <div class="balance-title">System View (가상 장부)</div>
+            <div class="balance-amount">₩1,000,000</div>
+            <div style="font-size:12px;color:var(--text-tertiary);">BTC 0.03개 · ETH 0.5개</div>
+          </div>
+          <div class="balance-divider"></div>
+          <div class="balance-col">
+            <div class="balance-title">Exchange View (실계좌)</div>
+            <div class="balance-amount">₩998,500</div>
+            <div style="font-size:12px;color:var(--text-tertiary);">BTC 0.03개 · ETH 0.5개</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <span class="drift-indicator">⚠ 오차 ₩1,500 — Reconciliation 필요</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- OrderBook -->
+    <section>
+      <h2>OrderBook (주문 현황)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>심볼</th><th>방향</th><th>유형</th><th>수량</th><th>체결</th><th>상태</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:600;">KRW-BTC</td>
+              <td style="color:var(--up);font-weight:600;">BUY</td>
+              <td>MARKET</td>
+              <td style="font-family:'JetBrains Mono',monospace;">0.05</td>
+              <td>
+                <div class="order-status">
+                  <span style="font-family:'JetBrains Mono',monospace;">0.05/0.05</span>
+                  <div class="fill-bar"><div class="fill-bar-inner" style="width:100%;background:var(--success);"></div></div>
+                </div>
+              </td>
+              <td><span class="badge badge-success">FILLED</span></td>
+            </tr>
+            <tr>
+              <td style="font-weight:600;">KRW-ETH</td>
+              <td style="color:var(--down);font-weight:600;">SELL</td>
+              <td>LIMIT</td>
+              <td style="font-family:'JetBrains Mono',monospace;">1.20</td>
+              <td>
+                <div class="order-status">
+                  <span style="font-family:'JetBrains Mono',monospace;">0.80/1.20</span>
+                  <div class="fill-bar"><div class="fill-bar-inner" style="width:66%;"></div></div>
+                </div>
+              </td>
+              <td><span class="badge badge-info badge-dot">PARTIAL</span></td>
+            </tr>
+            <tr>
+              <td style="font-weight:600;">KRW-SOL</td>
+              <td style="color:var(--up);font-weight:600;">BUY</td>
+              <td>MARKET</td>
+              <td style="font-family:'JetBrains Mono',monospace;">5.00</td>
+              <td>
+                <div class="order-status">
+                  <span style="font-family:'JetBrains Mono',monospace;">0.00/5.00</span>
+                  <div class="fill-bar"><div class="fill-bar-inner" style="width:0%;"></div></div>
+                </div>
+              </td>
+              <td><span class="badge badge-warning badge-dot">PENDING</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- BacktestProgress + EmergencyStop + NotificationBadge + Health -->
+    <section>
+      <h2>BacktestProgress / EmergencyStop / NotificationBadge</h2>
+      <div class="grid-3" style="align-items:start;">
+        <div class="card">
+          <h3>Backtest Progress</h3>
+          <div class="progress-wrap" style="margin-bottom:16px;">
+            <div class="progress-bar"><div class="progress-fill" style="width:67%;"></div></div>
+            <div class="progress-label"><span>진행중...</span><span>67%</span></div>
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--success);"></div></div>
+            <div class="progress-label"><span>완료</span><span style="color:var(--success);">100% ✓</span></div>
+          </div>
+        </div>
+        <div class="card" style="text-align:center;">
+          <h3>Emergency Stop</h3>
+          <button class="emergency-btn">⊘ 비상 정지</button>
+          <div style="margin-top:12px;font-size:12px;color:var(--text-tertiary);">모든 신호 처리 차단 + 미체결 취소</div>
+        </div>
+        <div class="card">
+          <h3>Notification Badge</h3>
+          <div class="row" style="gap:32px;justify-content:center;padding:16px 0;">
+            <div style="text-align:center;">
+              <div class="notif-badge-wrap"><span class="notif-icon">🔔</span></div>
+              <div style="font-size:11px;color:var(--text-tertiary);margin-top:6px;">없음</div>
+            </div>
+            <div style="text-align:center;">
+              <div class="notif-badge-wrap"><span class="notif-icon">🔔</span><span class="notif-count">3</span></div>
+              <div style="font-size:11px;color:var(--text-tertiary);margin-top:6px;">소량</div>
+            </div>
+            <div style="text-align:center;">
+              <div class="notif-badge-wrap"><span class="notif-icon">🔔</span><span class="notif-count">99+</span></div>
+              <div style="font-size:11px;color:var(--text-tertiary);margin-top:6px;">다량</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Service Health Grid -->
+    <section>
+      <h2>ServiceHealthGrid (Admin)</h2>
+      <div class="health-grid">
+        <div class="health-card">
+          <div class="health-name">User Service</div>
+          <div class="health-status"><span class="health-dot up"></span> Healthy</div>
+          <div class="health-meta">Latency: 12ms</div>
+        </div>
+        <div class="health-card">
+          <div class="health-name">Market Service</div>
+          <div class="health-status"><span class="health-dot up"></span> Healthy</div>
+          <div class="health-meta">Latency: 8ms · Lag: 42</div>
+        </div>
+        <div class="health-card">
+          <div class="health-name">Agent Service</div>
+          <div class="health-status"><span class="health-dot up"></span> Healthy</div>
+          <div class="health-meta">Latency: 15ms · Lag: 128</div>
+        </div>
+        <div class="health-card" style="border-color:var(--danger);">
+          <div class="health-name">Exchange Service</div>
+          <div class="health-status"><span class="health-dot down"></span> Unhealthy</div>
+          <div class="health-meta" style="color:var(--danger);">CB OPEN · Err: 52%</div>
+        </div>
+        <div class="health-card">
+          <div class="health-name">Trade Service</div>
+          <div class="health-status"><span class="health-dot up"></span> Healthy</div>
+          <div class="health-meta">Latency: 11ms · Lag: 5</div>
+        </div>
+        <div class="health-card">
+          <div class="health-name">Notification Service</div>
+          <div class="health-status"><span class="health-dot up"></span> Healthy</div>
+          <div class="health-meta">Latency: 9ms · Lag: 1,240</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- FEATURES -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="section-content" id="section-features">
+
+    <!-- SignIn -->
+    <section>
+      <h2>SignIn / SignUp</h2>
+      <div class="grid-2">
+        <div class="card" style="max-width:380px;">
+          <div style="text-align:center;margin-bottom:20px;">
+            <div style="font-size:20px;font-weight:700;">Trade Pilot</div>
+            <div style="font-size:13px;color:var(--text-tertiary);">로그인</div>
+          </div>
+          <div class="input-group" style="margin-bottom:12px;">
+            <label class="input-label">이메일</label>
+            <input class="input" type="email" placeholder="email@example.com" style="width:100%;" />
+          </div>
+          <div class="input-group" style="margin-bottom:16px;">
+            <label class="input-label">비밀번호</label>
+            <input class="input" type="password" placeholder="8자 이상" style="width:100%;" />
+          </div>
+          <button class="btn btn-md btn-primary" style="width:100%;">로그인</button>
+          <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--text-tertiary);">
+            계정이 없으신가요? <a style="color:var(--brand-400);cursor:pointer;">회원가입</a>
+          </div>
+        </div>
+        <div class="card" style="max-width:380px;">
+          <div style="text-align:center;margin-bottom:20px;">
+            <div style="font-size:20px;font-weight:700;">Trade Pilot</div>
+            <div style="font-size:13px;color:var(--text-tertiary);">회원가입</div>
+          </div>
+          <div class="input-group" style="margin-bottom:12px;">
+            <label class="input-label">이메일</label>
+            <input class="input input-error" type="email" value="existing@email.com" style="width:100%;" />
+            <span class="error-msg">이미 사용 중인 이메일입니다</span>
+          </div>
+          <div class="input-group" style="margin-bottom:12px;">
+            <label class="input-label">비밀번호</label>
+            <input class="input" type="password" value="pass" style="width:100%;" />
+            <span class="error-msg">영문 + 숫자 + 특수문자 조합 8자 이상</span>
+          </div>
+          <div class="input-group" style="margin-bottom:16px;">
+            <label class="input-label">이름</label>
+            <input class="input" type="text" placeholder="표시 이름" style="width:100%;" />
+          </div>
+          <button class="btn btn-md btn-primary disabled" style="width:100%;" disabled>회원가입</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CreateStrategy -->
+    <section>
+      <h2>CreateStrategy (Schema-driven UI)</h2>
+      <div class="card" style="max-width:500px;">
+        <h3 style="margin-bottom:16px;">전략 파라미터 설정</h3>
+        <div class="input-group" style="margin-bottom:12px;">
+          <label class="input-label">전략 유형</label>
+          <select class="input" style="width:100%;cursor:pointer;">
+            <option>MA Crossover (이동평균 크로스오버)</option>
+            <option>RSI (상대강도지수)</option>
+            <option>Bollinger Breakout (볼린저 밴드)</option>
+          </select>
+        </div>
+        <div class="grid-2" style="margin-bottom:12px;">
+          <div class="input-group">
+            <label class="input-label">단기 이동평균 기간</label>
+            <input class="input" type="number" value="20" min="1" max="50" style="width:100%;" />
+            <span style="font-size:11px;color:var(--text-tertiary);">1 ~ 50</span>
+          </div>
+          <div class="input-group">
+            <label class="input-label">장기 이동평균 기간</label>
+            <input class="input" type="number" value="60" min="10" max="200" style="width:100%;" />
+            <span style="font-size:11px;color:var(--text-tertiary);">10 ~ 200</span>
+          </div>
+        </div>
+        <div class="input-group" style="margin-bottom:12px;">
+          <label class="input-label">캔들 주기</label>
+          <select class="input" style="width:100%;cursor:pointer;">
+            <option>MIN_15 (15분봉)</option>
+            <option>MIN_60 (1시간봉)</option>
+            <option>DAY (일봉)</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+          <button class="btn btn-md btn-ghost">취소</button>
+          <button class="btn btn-md btn-primary">전략 저장</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- DecisionLogTable -->
+    <section>
+      <h2>DecisionLogTable (감사 로그)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>시각</th><th>심볼</th><th>신호</th><th>가격</th><th>RSI</th><th>MA(20)</th><th>Confidence</th><th>상태</th></tr>
+          </thead>
+          <tbody>
+            <tr style="cursor:pointer;">
+              <td style="font-family:'JetBrains Mono',monospace;font-size:12px;">18:00:00</td>
+              <td style="font-weight:600;">KRW-BTC</td>
+              <td><span style="color:var(--up);font-weight:700;">▲ BUY</span></td>
+              <td style="font-family:'JetBrains Mono',monospace;">50,150,000</td>
+              <td style="font-family:'JetBrains Mono',monospace;">28.4</td>
+              <td style="font-family:'JetBrains Mono',monospace;">49,800,000</td>
+              <td style="font-family:'JetBrains Mono',monospace;">0.85</td>
+              <td><span class="badge badge-success">SUCCESS</span></td>
+            </tr>
+            <tr style="cursor:pointer;">
+              <td style="font-family:'JetBrains Mono',monospace;font-size:12px;">17:45:00</td>
+              <td style="font-weight:600;">KRW-BTC</td>
+              <td><span style="color:var(--text-tertiary);">— HOLD</span></td>
+              <td style="font-family:'JetBrains Mono',monospace;">49,920,000</td>
+              <td style="font-family:'JetBrains Mono',monospace;">45.2</td>
+              <td style="font-family:'JetBrains Mono',monospace;">49,750,000</td>
+              <td style="font-family:'JetBrains Mono',monospace;">0.12</td>
+              <td><span class="badge badge-success">SUCCESS</span></td>
+            </tr>
+            <tr style="cursor:pointer;">
+              <td style="font-family:'JetBrains Mono',monospace;font-size:12px;">17:30:00</td>
+              <td style="font-weight:600;">KRW-BTC</td>
+              <td><span style="color:var(--down);font-weight:700;">▼ SELL</span></td>
+              <td style="font-family:'JetBrains Mono',monospace;">50,300,000</td>
+              <td style="font-family:'JetBrains Mono',monospace;">74.1</td>
+              <td style="font-family:'JetBrains Mono',monospace;">49,600,000</td>
+              <td style="font-family:'JetBrains Mono',monospace;">0.91</td>
+              <td><span class="badge badge-success">SUCCESS</span></td>
+            </tr>
+            <tr style="cursor:pointer;background:rgba(240,68,82,0.05);">
+              <td style="font-family:'JetBrains Mono',monospace;font-size:12px;">17:15:00</td>
+              <td style="font-weight:600;">KRW-BTC</td>
+              <td><span style="color:var(--text-tertiary);">— HOLD</span></td>
+              <td style="font-family:'JetBrains Mono',monospace;">—</td>
+              <td style="font-family:'JetBrains Mono',monospace;">—</td>
+              <td style="font-family:'JetBrains Mono',monospace;">—</td>
+              <td style="font-family:'JetBrains Mono',monospace;">—</td>
+              <td><span class="badge badge-error">ERROR</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- MODALS -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-default" onclick="if(event.target===this)this.classList.remove('open')">
+    <div class="modal">
+      <div class="modal-title">에이전트 활성화</div>
+      <div class="modal-body">
+        <strong>BTC 모멘텀봇</strong>을 활성화하시겠습니까?<br>
+        초기 자본금 <strong>₩2,000,000</strong>으로 포트폴리오가 초기화됩니다.
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-md btn-ghost" onclick="document.getElementById('modal-default').classList.remove('open')">취소</button>
+        <button class="btn btn-md btn-primary" onclick="document.getElementById('modal-default').classList.remove('open')">활성화</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-danger" onclick="if(event.target===this)this.classList.remove('open')">
+    <div class="modal">
+      <div class="modal-title" style="color:var(--danger);">⚠ 회원 탈퇴</div>
+      <div class="modal-body">
+        탈퇴하면 모든 에이전트, 포트폴리오, 거래 내역이 비활성화됩니다.<br>
+        이 작업은 되돌릴 수 없습니다.
+      </div>
+      <div class="input-group" style="margin-bottom:16px;">
+        <label class="input-label">비밀번호 재확인</label>
+        <input class="input" type="password" placeholder="비밀번호 입력" style="width:100%;" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-md btn-ghost" onclick="document.getElementById('modal-danger').classList.remove('open')">취소</button>
+        <button class="btn btn-md btn-danger">탈퇴하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- SCRIPTS -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <script>
+    // 테마 토글
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.documentElement.setAttribute('data-theme', btn.dataset.theme)
+        document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+      })
+    })
+
+    // 섹션 탭
+    document.querySelectorAll('.section-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.section-tab').forEach(t => t.classList.remove('active'))
+        document.querySelectorAll('.section-content').forEach(c => c.classList.remove('active'))
+        tab.classList.add('active')
+        document.getElementById('section-' + tab.dataset.section).classList.add('active')
+      })
+    })
+
+    // 캔들 차트 생성
+    function generateCandles(container, count) {
+      const area = container
+      let price = 50000000
+      for (let i = 0; i < count; i++) {
+        const change = (Math.random() - 0.48) * price * 0.015
+        const open = price
+        price += change
+        const close = price
+        const high = Math.max(open, close) * (1 + Math.random() * 0.003)
+        const low = Math.min(open, close) * (1 - Math.random() * 0.003)
+        const isUp = close >= open
+
+        const bodyHeight = Math.max(2, Math.abs(close - open) / price * 800)
+        const wickTop = (high - Math.max(open, close)) / price * 800
+        const wickBot = (Math.min(open, close) - low) / price * 800
+        const totalH = wickTop + bodyHeight + wickBot
+
+        const stick = document.createElement('div')
+        stick.className = 'candle-stick ' + (isUp ? 'candle-up' : 'candle-down')
+        stick.style.height = totalH + 'px'
+        stick.innerHTML = `
+          <div class="candle-wick" style="height:${wickTop}px;"></div>
+          <div class="candle-body" style="height:${bodyHeight}px;"></div>
+          <div class="candle-wick" style="height:${wickBot}px;"></div>
+        `
+        area.appendChild(stick)
+
+        // 신호 마커
+        if (i === Math.floor(count * 0.3)) {
+          const marker = document.createElement('div')
+          marker.className = 'signal-marker signal-buy'
+          marker.textContent = '▲'
+          marker.style.left = (i / count * 100) + '%'
+          area.appendChild(marker)
+        }
+        if (i === Math.floor(count * 0.7)) {
+          const marker = document.createElement('div')
+          marker.className = 'signal-marker signal-sell'
+          marker.textContent = '▼'
+          marker.style.left = (i / count * 100) + '%'
+          area.appendChild(marker)
+        }
+      }
+    }
+
+    generateCandles(document.getElementById('candle-chart-1'), 40)
+    generateCandles(document.getElementById('candle-chart-2'), 40)
+  </script>
+
+</body>
+</html>
