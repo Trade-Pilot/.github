@@ -11,5 +11,6 @@
 | 파일 | 섹션 | 설명 |
 |------|------|------|
 | [unit-test.md](testing/unit-test.md) | 1~2 | 테스트 피라미드, 단위 테스트 (도메인 모델, 서비스, 지표, 전략) |
-| [integration-test.md](testing/integration-test.md) | 3~4 | 통합 테스트 (DB, Kafka, gRPC, Redis), E2E 테스트 시나리오 |
+| [integration-test.md](testing/integration-test.md) | 3 | 통합 테스트 (DB, Kafka, gRPC, Redis) |
+| [e2e-test.md](testing/e2e-test.md) | 4 | E2E 테스트 시나리오 (가상거래, 회원탈퇴, 비상정지) |
 | [mock-coverage.md](testing/mock-coverage.md) | 5~9 | Mock 전략, 커버리지, 네이밍, CI, 데이터 관리 |
