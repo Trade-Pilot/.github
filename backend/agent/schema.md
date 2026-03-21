@@ -101,7 +101,7 @@ CREATE TABLE portfolio (
     reserved_cash   NUMERIC(30,8) NOT NULL DEFAULT 0, -- BUY 신호 점유 현금 (체결 전)
     realized_pnl    NUMERIC(30,8) NOT NULL DEFAULT 0, -- 누적 실현손익
     created_date      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    modified_date      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE portfolio_history (
@@ -132,7 +132,7 @@ CREATE TABLE position (
     reserved_quantity NUMERIC(30,8) NOT NULL DEFAULT 0, -- SELL 신호 점유 수량 (체결 전)
     average_price     NUMERIC(30,8) NOT NULL,
     created_date        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    modified_date        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     UNIQUE (portfolio_id, symbol_id)
 );
 

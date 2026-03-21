@@ -80,7 +80,7 @@ CREATE TABLE exchange_account (
     encrypted_secret_key TEXT       NOT NULL,
     status              VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    modified_date          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_ea_user   ON exchange_account (user_id);
@@ -217,7 +217,7 @@ CREATE TABLE strategy (
     status      VARCHAR(20)  NOT NULL DEFAULT 'DRAFT',
     parameters  JSONB        NOT NULL DEFAULT '{}',
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    modified_date  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_strategy_user   ON strategy (user_id);
@@ -237,7 +237,7 @@ CREATE TABLE agent (
     risk_config     JSONB         NOT NULL DEFAULT '{}',
     initial_capital NUMERIC(30,8) NOT NULL,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    modified_date  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_agent_user     ON agent (user_id);
@@ -274,7 +274,7 @@ CREATE TABLE portfolio (
     reserved_cash   NUMERIC(30,8) NOT NULL DEFAULT 0,
     realized_pnl    NUMERIC(30,8) NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    modified_date      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 ```
 
@@ -288,7 +288,7 @@ CREATE TABLE position (
     reserved_quantity NUMERIC(30,8) NOT NULL DEFAULT 0,
     average_price     NUMERIC(30,8) NOT NULL,
     created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    modified_date        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     UNIQUE (portfolio_id, symbol_id)
 );
 ```
@@ -404,7 +404,7 @@ CREATE TABLE virtual_trade_registration (
     symbol_ids  JSONB        NOT NULL DEFAULT '[]',
     status      VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    modified_date  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_vtr_user   ON virtual_trade_registration (user_id);
@@ -463,7 +463,7 @@ CREATE TABLE trade_registration (
     order_config         JSONB         NOT NULL DEFAULT '{}',
     emergency_stopped    BOOLEAN       NOT NULL DEFAULT FALSE,
     created_at           TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at           TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    modified_date           TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_tr_user   ON trade_registration (user_id);
@@ -488,7 +488,7 @@ CREATE TABLE trade_order (
     exchange_order_id      VARCHAR(100),
     timeout_at             TIMESTAMPTZ,
     created_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    modified_date             TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_order_agent       ON trade_order (agent_id,    created_at DESC);

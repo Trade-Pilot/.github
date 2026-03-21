@@ -58,7 +58,7 @@ class OutboxEvent(
     val parentSpanIdentifier: String?,         // 원본 요청 spanId (MDC에서 캡처)
     var status: OutboxStatus,          // PENDING → PUBLISHED / FAILED / DEAD
     var retryCount: Int = 0,           // Kafka 발행 실패 횟수 (MAX: 3)
-    val createdAt: OffsetDateTime,
+    val createdDate: OffsetDateTime,
     var publishedAt: OffsetDateTime?,
 )
 
@@ -92,7 +92,7 @@ OutboxEvent(
     parentSpanIdentifier = span?.context()?.spanId(),   // MDC에서 캡처
     status = OutboxStatus.PENDING,
     retryCount = 0,
-    createdAt = OffsetDateTime.now(),
+    createdDate = OffsetDateTime.now(),
     publishedAt = null,
 )
 ```
@@ -322,7 +322,7 @@ if (event.retryCount >= MAX_OUTBOX_RETRY_COUNT) {
             "aggregateType" to event.aggregateType,
             "aggregateIdentifier" to event.aggregateIdentifier,
             "eventType" to event.eventType,
-            "createdAt" to event.createdAt.toString(),
+            "createdDate" to event.createdDate.toString(),
         ),
     ))
 }
